@@ -1,0 +1,283 @@
+<style>
+  :root {
+    --google-blue: #1a73e8;
+    --google-red: #d93025;
+    --google-yellow: #fbbc04;
+    --border-color: #dadce0;
+    --bg-light: #f8f9fa;
+    --text-main: #3c4043;
+    --text-sub: #5f6368;
+  }
+
+  body {
+    font-family: 'Roboto', sans-serif;
+    padding: 12px;
+    background-color: var(--bg-light);
+    color: var(--text-main);
+    margin: 0;
+  }
+
+  /* Header Section */
+  header { margin-bottom: 15px; }
+  h2 { font-size: 18px; margin: 0; color: var(--google-blue); }
+  .subtitle { font-size: 11px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; font-weight: bold; }
+
+  /* Schema Selection Card */
+  .card {
+    background: white;
+    border: 1px solid var(--border-color);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+  }
+
+  .controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-bottom: 5px;
+  }
+
+  .mini-btn {
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-sub);
+  }
+  
+  .mini-btn:hover { background: #f1f3f4; }
+
+  /* The Schema List - FIXED LAYOUT */
+  .scroll-box {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    margin: 8px 0;
+    background: #fff;
+  }
+
+  .schema-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #f1f3f4;
+  }
+
+  .schema-check {
+    flex-shrink: 0;
+    margin: 0;
+    width: 14px;
+    height: 14px;
+  }
+
+  .col-name {
+    flex: 1; /* This pushes the dropdown to the right */
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* Adds ... if name is long */
+    color: var(--text-main);
+    min-width: 0; /* Required for ellipsis to work in flex */
+  }
+
+  .schema-type {
+    flex-shrink: 0;
+    width: 95px; /* Fixed width to keep dropdowns aligned */
+    font-size: 10px;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: #fff;
+    color: var(--text-main);
+  }
+
+  /* Buttons */
+  .primary-btn {
+    background: var(--google-blue);
+    color: white;
+    border: none;
+    padding: 10px;
+    width: 100%;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    transition: background 0.2s;
+  }
+  .primary-btn:hover { background: #1765cc; }
+  .primary-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+  .secondary-btn {
+    background: white;
+    color: var(--google-blue);
+    border: 1px solid var(--google-blue);
+    padding: 8px;
+    width: 100%;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 10px;
+  }
+  .secondary-btn:hover:not(:disabled) { background: #e8f0fe; }
+  .secondary-btn:disabled { opacity: 0.5; cursor: not-allowed; border-color: #dadce0; color: #9aa0a6; }
+
+  /* Modules & Toolkit */
+  .module-card {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: opacity 0.3s ease;
+  }
+
+  summary {
+    padding: 12px;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-weight: 500;
+    user-select: none;
+  }
+
+  summary:hover { background-color: #f1f3f4; }
+
+  .badge {
+    margin-left: auto;
+    background: var(--google-yellow);
+    color: #202124;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: bold;
+  }
+  
+  .badge:empty { display: none; }
+
+  .disabled-module {
+    opacity: 0.4;
+    pointer-events: none;
+    filter: grayscale(1);
+    border-style: dashed;
+  }
+
+  .module-content {
+    padding: 0 12px 12px 12px;
+    border-top: 1px solid #f1f3f4;
+    font-size: 12px;
+  }
+
+  /* Variables in modules */
+  .var-check-row, .var-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px dashed #eee;
+  }
+
+  .var-count { color: var(--google-blue); font-weight: bold; }
+
+  .scroll-box-mini {
+    max-height: 100px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    padding: 5px;
+    margin: 8px 0;
+    background: #fff;
+  }
+
+  /* Forms & Indicators */
+  .instruction { font-size: 11px; font-weight: bold; margin: 10px 0 5px 0; color: var(--text-sub); }
+  
+  select { width: 100%; padding: 5px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 12px; margin-bottom: 8px; }
+
+  .status-indicator {
+    font-size: 11px;
+    margin: 10px 0;
+    padding: 8px;
+    background: #e8f0fe;
+    color: #1967d2;
+    border-radius: 4px;
+    line-height: 1.4;
+  }
+
+  .error-msg {
+    background: #fce8e6;
+    color: var(--google-red);
+    border: 1px solid var(--google-red);
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
+  footer {
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  #log-console { font-family: monospace; font-size: 10px; color: var(--text-sub); }
+
+  .config-row {
+    background: #f1f3f4;
+    border-radius: 6px;
+    padding: 8px;
+    margin-bottom: 8px;
+    border: 1px solid #dee1e5;
+  }
+  .config-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 11px;
+  }
+  .scaling-method {
+    width: 100%;
+    font-size: 10px;
+    padding: 4px;
+  }
+
+  .scaling-method {
+    width: 100%;
+    font-size: 11px;
+    margin-top: 8px;
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .config-row {
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+  }
+
+  .config-row:has(.scaling-check:checked) {
+    border-left: 3px solid var(--google-blue);
+    background: #f8f9fa;
+  }
+
+  .config-row { background: #f8f9fa; border: 1px solid #dadce0; border-radius: 6px; padding: 10px; margin-bottom: 8px; transition:
+    border 0.2s; }
+  .config-row:has(input:checked) { border-left: 4px solid var(--google-blue); background: #fff; }
+  .config-header { display: flex; align-items: center; gap: 10px; font-size: 11px; }
+  .folder-content { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; animation: slideDown 0.3s ease-out; }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  .instruction { font-size: 10px; color: #5f6368; margin: 5px 0; font-weight: bold; }
+  select { width: 100%; padding: 4px; font-size: 11px; margin-bottom: 5px; }
+
+</style>

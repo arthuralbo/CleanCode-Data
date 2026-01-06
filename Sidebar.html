@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head><base target="_top"><?!= include('Styles'); ?></head>
+  <body>
+    <div class="sidebar-wrapper">
+      <header><h2>Data Prep Engine</h2><p class="subtitle">1. Define Schema & Scan</p></header>
+      <div class="schema-box card">
+        <div class="controls"><button class="mini-btn" onclick="toggleAllSchema(true)">All</button><button class="mini-btn" onclick="toggleAllSchema(false)">None</button></div>
+        <div id="schema-list" class="scroll-box"></div>
+        <button id="scan-btn" class="primary-btn" onclick="runInitialScan()">🔍 Validate & Scan</button>
+      </div>
+      <div id="scan-status" class="status-indicator">Select variables to begin.</div>
+      <hr>
+      <main>
+        <details id="mod-dates" class="module-card disabled-module">
+          <summary>📅 Date Formatting <span class="badge"></span></summary>
+          <div class="module-content">
+            <div id="list-dates" class="variable-config-container"></div>
+            <button id="date-apply-btn" class="secondary-btn" disabled onclick="runDateFix()">Apply Transformation</button>
+          </div>
+        </details>
+        <details id="mod-scaling" class="module-card disabled-module">
+          <summary>⚖️ Scaling & Outliers <span class="badge"></span></summary>
+          <div class="module-content">
+            <div id="list-outliers" class="variable-config-container"></div>
+            <button id="scaling-apply-btn" class="secondary-btn" disabled onclick="runScalingFix()">Apply Scaling</button>
+          </div>
+        </details>
+        <details id="mod-missing" class="module-card disabled-module"><summary>🩹 Missing Values <span class="badge"></span></summary><div class="module-content" id="list-missing"></div></details>
+        <details id="mod-cleanup" class="module-card disabled-module"><summary>🧹 Structural Cleanup <span class="badge"></span></summary><div class="module-content" id="list-cleanup"></div></details>
+      </main>
+      <footer><div id="log-console">Ready.</div></footer>
+    </div>
+    <?!= include('Scripts'); ?>
+  </body>
+</html>
