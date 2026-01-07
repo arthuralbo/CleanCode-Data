@@ -311,3 +311,49 @@ function applyStructuralCleanup(configs) {
 
   return "Structural cleanup finished. New columns created.";
 }
+
+/**
+ * Handles Categorical Encoding Transformations
+ */
+function applyEncodingTransformation(configs) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const sortedConfigs = configs.sort((a, b) => b.index - a.index);
+
+  sortedConfigs.forEach(config => {
+    const colIdx = config.index;
+    const colName = headers[colIdx - 1];
+    const rawData = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues().map(r => r[0].toString());
+
+    if (config.method === "ONE-HOT") {
+      const uniqueValues = [...new Set(rawData)].filter(v => v !== "");
+      uniqueValues.forEach((val, i) => {
+        const newColIdx = colIdx + i;
+        sheet.insertColumnAfter(newColIdx);
+        sheet.getRange(1, newColIdx + 1).setValue(`${colName}_${val}`).setFontWeight("bold");
+        
+        const dummyData = rawData.map(r => [r === val ? 1 : 0]);
+        sheet.getRange(2, newColIdx + 1, dummyData.length, 1).setValues(dummyData);
+      });
+    } 
+    else if (config.method === "LABEL") {
+      // config.order is an array like ["Small", "Medium", "Large"]
+      const map = {};
+      config.order.forEach((val, i) => map[val] = i);
+
+      sheet.insertColumnAfter(colIdx);
+      sheet.getRange(1, colIdx + 1).setValue(`${colName}_encoded`).setFontWeight("bold");
+
+      const encodedData = rawData.map(r => [map[r] !== undefined ? map[r] : -1]);
+      sheet.getRange(2, colIdx + 1, encodedData.length, 1).setValues(encodedData);
+    }
+  });
+  return "Encoding complete. New numeric features added.";
+}
+
+function getUniqueValues(colIdx) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const data = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues();
+  const unique = [...new Set(data.map(r => r[0].toString()))].filter(v => v !== "");
+  return unique;
+}
