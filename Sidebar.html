@@ -2,19 +2,35 @@
 <html>
   <head>
     <base target="_top">
-    <?!= include('Styles'); ?>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <?!= include('Styles'); ?>
   </head>
   <body>
     <div class="sidebar-wrapper">
-      <header><h2>Data Prep Engine</h2><p class="subtitle">1. Define Schema & Scan</p></header>
-      <div class="schema-box card">
-        <div class="controls"><button class="mini-btn" onclick="toggleAllSchema(true)">All</button><button class="mini-btn" onclick="toggleAllSchema(false)">None</button></div>
-        <div id="schema-list" class="scroll-box"></div>
+      <header>
+        <h2>Data Prep Engine</h2>
+        <p class="subtitle">1. Define Schema & Scan</p>
+      </header>
+
+      <div class="card">
+        <div class="controls">
+          <button class="mini-btn" onclick="toggleAllSchema(true)">All</button>
+          <button class="mini-btn" onclick="toggleAllSchema(false)">None</button>
+        </div>
+        
+        <p class="instruction" style="margin-top:0;">Variable Schema</p>
+        
+        <div id="schema-list" class="scroll-box">
+          </div>
+        
         <button id="scan-btn" class="primary-btn" onclick="runInitialScan()">🔍 Validate & Scan</button>
+        
+        <div id="scan-status">Ready.</div>
       </div>
-      <div id="scan-status" class="status-indicator">Select variables to begin.</div>
-      <hr>
+
+      <p class="subtitle" style="margin-bottom: 8px;">2. Apply Transformations</p>
+
       <main>
         <details id="mod-dates" class="module-card disabled-module">
           <summary>📅 Date Formatting <span class="badge"></span></summary>
@@ -23,6 +39,7 @@
             <button id="date-apply-btn" class="secondary-btn" disabled onclick="runDateFix()">Apply Transformation</button>
           </div>
         </details>
+
         <details id="mod-scaling" class="module-card disabled-module">
           <summary>⚖️ Scaling & Outliers <span class="badge"></span></summary>
           <div class="module-content">
@@ -30,6 +47,7 @@
             <button id="scaling-apply-btn" class="secondary-btn" disabled onclick="runScalingFix()">Apply Scaling</button>
           </div>
         </details>
+
         <details id="mod-missing" class="module-card disabled-module">
           <summary>🩹 Missing Values <span class="badge"></span></summary>
           <div class="module-content">
@@ -37,13 +55,15 @@
             <button id="missing-apply-btn" class="secondary-btn" disabled onclick="runMissingFix()">Apply Imputation</button>
           </div>
         </details>
+
         <details id="mod-cleanup" class="module-card disabled-module">
           <summary>🧹 Structural Cleanup <span class="badge"></span></summary>
           <div class="module-content">
             <div id="list-cleanup" class="variable-config-container"></div>
-            <button id="cleanup-apply-btn" class="secondary-btn" onclick="runCleanupFix()">Apply Cleanup</button>
+            <button id="cleanup-apply-btn" class="secondary-btn" disabled onclick="runCleanupFix()">Apply Cleanup</button>
           </div>
         </details>
+
         <details id="mod-encoding" class="module-card disabled-module">
           <summary>🔢 Categorical Encoding <span class="badge"></span></summary>
           <div class="module-content">
@@ -52,8 +72,12 @@
           </div>
         </details>
       </main>
-      <footer><div id="log-console">Ready.</div></footer>
+
+      <footer>
+        <div id="log-console">> System initialized.</div>
+      </footer>
     </div>
+
     <?!= include('Scripts'); ?>
   </body>
 </html>
