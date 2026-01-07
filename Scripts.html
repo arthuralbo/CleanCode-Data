@@ -38,11 +38,11 @@
 
   function displayScanResults(res) {
     resetUI();
-    // CHANGED: 'generic' to 'missing' so the unlock function uses your new missing value logic
     if (res.hasMissing) unlock('mod-missing', 'list-missing', res.missingCount, res.missingDetails, 'missing');
     if (res.hasDates) unlock('mod-dates', 'list-dates', res.dateCount, res.dateDetails, 'date');
     if (res.hasOutliers) unlock('mod-scaling', 'list-outliers', res.outlierCount, res.outlierDetails, 'scaling');
     if (res.hasCleanup) unlock('mod-cleanup', 'list-cleanup', res.cleanupCount, res.cleanupDetails, 'cleanup');
+    if (res.hasStrings) unlock('mod-encoding', 'list-encoding', res.stringCount, res.stringDetails, 'encoding');
     
     document.getElementById('scan-status').innerHTML = `<strong>Scan Complete:</strong> ${res.totalIssues} issues found.`;
   }
@@ -147,6 +147,25 @@
               <label class="check-label"><input type="checkbox" class="clean-alpha"> Remove Special Chars</label>
             </div>
           </div>`;
+      } else if (type === 'encoding') {
+        html += `
+          <div class="config-row" data-colname="${colName}">
+            <div class="config-header">
+              <input type="checkbox" class="encoding-check" value="${colIdx}" onchange="handleEncodingSelection(this)">
+              <div class="header-text"><strong>${colName}</strong></div>
+            </div>
+            <div class="folder-content" style="display:none;">
+              <select class="encoding-method" onchange="handleEncodingMethodChange(this)">
+                <option value="" disabled selected>Select Encoding...</option>
+                <option value="ONE-HOT">One-Hot Encoding (Dummies)</option>
+                <option value="LABEL">Label Encoding (Ordinal)</option>
+              </select>
+              <div class="ordinal-sort-area" style="display:none; margin-top:10px;">
+                <p class="instruction">Drag/Move to set order (Top = 0):</p>
+                <ul class="sortable-list"></ul>
+              </div>
+            </div>
+          </div>`;
       }
     }
     document.getElementById(listId).innerHTML = html;
@@ -159,7 +178,8 @@
     validateScalingInputs(); 
     validateDateInputs();
     validateMissingInputs();
-    validateCleanupInputs(); // ADDED: To enable/disable the Cleanup button
+    validateCleanupInputs(); 
+    validateEncodingInputs();
   }
 
   function validateScalingInputs() {
@@ -204,15 +224,21 @@
   }
 
   function toggleLoading(b, load, txt) { b.disabled = load; b.innerText = txt; b.style.opacity = load ? "0.5" : "1"; document.querySelector('main').style.pointerEvents = load ? 'none' : 'auto'; }
-  function resetUI() { ['mod-missing', 'mod-dates', 'mod-scaling', 'mod-cleanup'].forEach(id => { const el = document.getElementById(id); el.classList.add('disabled-module'); el.removeAttribute('open'); }); }
+
+
+  function resetUI() { ['mod-missing', 'mod-dates', 'mod-scaling', 'mod-cleanup', 'mod-encoding'].forEach(id => { const el = document.getElementById(id); el.classList.add('disabled-module'); el.removeAttribute('open'); }); }
+
   function toggleAllSchema(v) { document.querySelectorAll('.schema-check').forEach(c => c.checked = v); }
+
   function updateLog(m) { document.getElementById('log-console').innerText = "> " + m; }
+
 
   function handleMissingMethodChange(select) {
     const customInput = select.closest('.folder-content').querySelector('.custom-input');
     customInput.style.display = (select.value === "CUSTOM") ? "block" : "none";
     validateMissingInputs();
   }
+
 
   function validateMissingInputs() {
     const any = Array.from(document.querySelectorAll('#list-missing .config-row')).some(row => {
@@ -273,6 +299,73 @@
       .some(row => row.querySelector('.cleanup-master-check').checked);
     
     document.getElementById('cleanup-apply-btn').disabled = !any;
+  }
+
+  /**
+   * Fetches unique values to build the Label Encoding order list
+   */
+  function handleEncodingMethodChange(select) {
+    const row = select.closest('.config-row');
+    const sortArea = row.querySelector('.ordinal-sort-area');
+    const colIdx = row.querySelector('.encoding-check').value;
+
+    if (select.value === "LABEL") {
+      sortArea.style.display = "block";
+      google.script.run.withSuccessHandler(values => {
+        const list = sortArea.querySelector('.sortable-list');
+        
+        // Build the list
+        list.innerHTML = values.map(v => `
+          <li class="sort-item">
+            <span class="drag-handle">☰</span>
+            <span class="item-text">${v}</span>
+            <input type="hidden" value="${v}">
+          </li>`).join('');
+
+        // INITIALIZE SORTABLEJS
+        new Sortable(list, {
+          animation: 150,
+          handle: '.drag-handle', // Restricted to the ☰ icon
+          ghostClass: 'sortable-ghost', // Style for the empty space while dragging
+          chosenClass: 'sortable-chosen', // Style for the item being picked up
+          dragClass: 'sortable-drag' // Style for the actual moving element
+        });
+        
+      }).getUniqueValues(colIdx);
+    } else {
+      sortArea.style.display = "none";
+    }
+    validateEncodingInputs();
+  }
+
+  function runEncodingFix() {
+    const btn = document.getElementById('encoding-apply-btn');
+    const configs = [];
+    document.querySelectorAll('#list-encoding .config-row').forEach(row => {
+      const cb = row.querySelector('.encoding-check');
+      if (cb.checked) {
+        const method = row.querySelector('.encoding-method').value;
+        const order = Array.from(row.querySelectorAll('.sort-item input')).map(i => i.value);
+        configs.push({ index: parseInt(cb.value), method: method, order: order });
+      }
+    });
+    toggleLoading(btn, true, "Encoding...");
+    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyEncodingTransformation(configs);
+  }
+
+  function handleEncodingSelection(cb) {
+    toggleFolder(cb);
+    validateEncodingInputs();
+  }
+
+  // Logic to enable/disable the Encoding Apply button
+  function validateEncodingInputs() {
+    const any = Array.from(document.querySelectorAll('#list-encoding .config-row')).some(row => {
+      const cb = row.querySelector('.encoding-check').checked;
+      const method = row.querySelector('.encoding-method').value;
+      return cb && method !== "";
+    });
+    document.getElementById('encoding-apply-btn').disabled = !any;
   }
 
 </script>
