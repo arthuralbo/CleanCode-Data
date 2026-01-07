@@ -38,10 +38,12 @@
 
   function displayScanResults(res) {
     resetUI();
-    if (res.hasMissing) unlock('mod-missing', 'list-missing', res.missingCount, res.missingDetails, 'generic');
+    // CHANGED: 'generic' to 'missing' so the unlock function uses your new missing value logic
+    if (res.hasMissing) unlock('mod-missing', 'list-missing', res.missingCount, res.missingDetails, 'missing');
     if (res.hasDates) unlock('mod-dates', 'list-dates', res.dateCount, res.dateDetails, 'date');
     if (res.hasOutliers) unlock('mod-scaling', 'list-outliers', res.outlierCount, res.outlierDetails, 'scaling');
-    if (res.hasCleanup) unlock('mod-cleanup', 'list-cleanup', res.cleanupCount, res.cleanupDetails, 'generic');
+    if (res.hasCleanup) unlock('mod-cleanup', 'list-cleanup', res.cleanupCount, res.cleanupDetails, 'cleanup');
+    
     document.getElementById('scan-status').innerHTML = `<strong>Scan Complete:</strong> ${res.totalIssues} issues found.`;
   }
 
@@ -52,8 +54,11 @@
     
     let html = '';
     for (const [colName, obsCount] of Object.entries(details)) {
-      const colIdx = Array.from(document.querySelectorAll('.schema-item'))
-        .find(i => i.querySelector('.col-name').innerText === colName).querySelector('.schema-check').value;
+      // Get the type from the schema list to determine dropdown options
+      const schemaItem = Array.from(document.querySelectorAll('.schema-item'))
+        .find(i => i.querySelector('.col-name').innerText === colName);
+      const colIdx = schemaItem.querySelector('.schema-check').value;
+      const colType = schemaItem.querySelector('.schema-type').value;
       
       if (type === 'scaling') {
         html += `
@@ -102,6 +107,46 @@
               </select>
             </div>
           </div>`;
+      } else if (type === 'missing') {
+        let options = '';
+        if (colType === 'Numeric') {
+          options = `<option value="MEAN">Mean</option><option value="MEDIAN">Median</option><option value="ZERO">Zero</option><option value="CUSTOM">Custom Number</option>`;
+        } else if (colType === 'Categorical') {
+          options = `<option value="MODE">Mode (Most Frequent)</option><option value="LABEL">Label as "Unknown"</option><option value="CUSTOM">Custom String</option>`;
+        } else {
+          options = `<option value="FORWARD">Forward Fill</option><option value="MEDIAN">Median Date</option><option value="CUSTOM">Custom Date</option>`;
+        }
+        // ADD THE DROP OPTION TO ALL TYPES
+        options += `<option value="DROP">❌ Drop Observations (Delete Rows)</option>`;
+
+        html += `
+          <div class="config-row">
+            <div class="config-header">
+              <input type="checkbox" class="missing-check" value="${colIdx}" data-type="${colType}" onchange="toggleFolder(this)">
+              <div class="header-text"><strong>${colName}</strong><span class="count-pill">${obsCount} missing</span></div>
+            </div>
+            <div class="folder-content" style="display:none;">
+              <select class="missing-method" onchange="handleMissingMethodChange(this)">
+                <option value="" disabled selected>Select Imputation...</option>
+                ${options}
+              </select>
+              <input type="text" class="custom-input" style="display:none; margin-top:5px;" placeholder="Enter custom value..." oninput="validateMissingInputs()">
+            </div>
+          </div>`;
+      } else if (type === 'cleanup') {
+        html += `
+          <div class="config-row">
+            <div class="config-header">
+              <input type="checkbox" class="cleanup-master-check" value="${colIdx}" onchange="toggleFolder(this)">
+              <div class="header-text"><strong>${colName}</strong><span class="count-pill">${obsCount} items</span></div>
+            </div>
+            <div class="folder-content" style="display:none; padding-left: 20px;">
+              <label class="check-label"><input type="checkbox" class="clean-trim" checked> Trim Spaces</label><br>
+              <label class="check-label"><input type="checkbox" class="clean-lower"> Convert to Lowercase</label><br>
+              <label class="check-label"><input type="checkbox" class="clean-upper"> Convert to Uppercase</label><br>
+              <label class="check-label"><input type="checkbox" class="clean-alpha"> Remove Special Chars</label>
+            </div>
+          </div>`;
       }
     }
     document.getElementById(listId).innerHTML = html;
@@ -110,7 +155,11 @@
   function toggleFolder(cb) {
     const content = cb.closest('.config-row').querySelector('.folder-content');
     content.style.display = cb.checked ? "block" : "none";
-    validateScalingInputs(); validateDateInputs();
+    
+    validateScalingInputs(); 
+    validateDateInputs();
+    validateMissingInputs();
+    validateCleanupInputs(); // ADDED: To enable/disable the Cleanup button
   }
 
   function validateScalingInputs() {
@@ -143,14 +192,87 @@
     google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyScalingTransformation(configs);
   }
 
+  // Ensure refreshAfterFix works for all modules by using a generic label
   function refreshAfterFix(btn, msg) {
-    updateLog(msg); resetUI();
-    document.getElementById('scan-status').innerText = "Select variables to begin.";
-    google.script.run.withSuccessHandler(schema => { renderSchema(schema); toggleLoading(btn, false, "Apply"); }).getInitialSchema();
+    updateLog(msg); 
+    resetUI();
+    document.getElementById('scan-status').innerText = "Update complete. Select variables to re-scan.";
+    google.script.run.withSuccessHandler(schema => { 
+      renderSchema(schema); 
+      toggleLoading(btn, false, "Apply"); 
+    }).getInitialSchema();
   }
 
   function toggleLoading(b, load, txt) { b.disabled = load; b.innerText = txt; b.style.opacity = load ? "0.5" : "1"; document.querySelector('main').style.pointerEvents = load ? 'none' : 'auto'; }
   function resetUI() { ['mod-missing', 'mod-dates', 'mod-scaling', 'mod-cleanup'].forEach(id => { const el = document.getElementById(id); el.classList.add('disabled-module'); el.removeAttribute('open'); }); }
   function toggleAllSchema(v) { document.querySelectorAll('.schema-check').forEach(c => c.checked = v); }
   function updateLog(m) { document.getElementById('log-console').innerText = "> " + m; }
+
+  function handleMissingMethodChange(select) {
+    const customInput = select.closest('.folder-content').querySelector('.custom-input');
+    customInput.style.display = (select.value === "CUSTOM") ? "block" : "none";
+    validateMissingInputs();
+  }
+
+  function validateMissingInputs() {
+    const any = Array.from(document.querySelectorAll('#list-missing .config-row')).some(row => {
+      const cb = row.querySelector('.missing-check').checked;
+      const method = row.querySelector('.missing-method').value;
+      const custom = row.querySelector('.custom-input');
+      if (!cb || !method) return false;
+      if (method === "CUSTOM" && !custom.value) return false;
+      return true;
+    });
+    document.getElementById('missing-apply-btn').disabled = !any;
+  }
+
+  function runMissingFix() {
+    const btn = document.getElementById('missing-apply-btn');
+    const configs = [];
+    document.querySelectorAll('#list-missing .config-row').forEach(row => {
+      const cb = row.querySelector('.missing-check');
+      if (cb.checked) {
+        configs.push({
+          index: parseInt(cb.value),
+          method: row.querySelector('.missing-method').value,
+          customVal: row.querySelector('.custom-input').value
+        });
+      }
+    });
+    toggleLoading(btn, true, "Imputing...");
+    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyMissingTransformation(configs);
+  }
+
+
+  /**
+   * Executes the cleanup and refreshes the UI
+   */
+  function runCleanupFix() {
+    const btn = document.getElementById('cleanup-apply-btn');
+    const configs = [];
+    
+    document.querySelectorAll('#list-cleanup .config-row').forEach(row => {
+      const master = row.querySelector('.cleanup-master-check');
+      if (master.checked) {
+        configs.push({
+          index: parseInt(master.value),
+          doTrim: row.querySelector('.clean-trim').checked,
+          doLower: row.querySelector('.clean-lower').checked,
+          doUpper: row.querySelector('.clean-upper').checked,
+          doAlphaNum: row.querySelector('.clean-alpha').checked
+        });
+      }
+    });
+
+    toggleLoading(btn, true, "Cleaning...");
+    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyStructuralCleanup(configs);
+  }
+
+  function validateCleanupInputs() {
+    const any = Array.from(document.querySelectorAll('#list-cleanup .config-row'))
+      .some(row => row.querySelector('.cleanup-master-check').checked);
+    
+    document.getElementById('cleanup-apply-btn').disabled = !any;
+  }
+
 </script>
