@@ -1,7 +1,24 @@
 <script>
   window.onload = function() {
     google.script.run.withSuccessHandler(renderSchema).getInitialSchema();
+    initAccordion();
   };
+
+  function initAccordion() {
+    const allDetails = document.querySelectorAll('details');
+    allDetails.forEach((targetDetail) => {
+      targetDetail.addEventListener('click', (e) => {
+        // If we are about to open this one...
+        if (!targetDetail.hasAttribute('open')) {
+          allDetails.forEach((otherDetail) => {
+            if (otherDetail !== targetDetail) {
+              otherDetail.removeAttribute('open');
+            }
+          });
+        }
+      });
+    });
+  }
 
   function renderSchema(schema) {
     const container = document.getElementById('schema-list');
@@ -38,25 +55,68 @@
 
   function displayScanResults(res) {
     resetUI();
-    if (res.hasMissing) unlock('mod-missing', 'list-missing', res.missingCount, res.missingDetails, 'missing');
-    if (res.hasDates) unlock('mod-dates', 'list-dates', res.dateCount, res.dateDetails, 'date');
-    if (res.hasOutliers) unlock('mod-scaling', 'list-outliers', res.outlierCount, res.outlierDetails, 'scaling');
-    if (res.hasCleanup) unlock('mod-cleanup', 'list-cleanup', res.cleanupCount, res.cleanupDetails, 'cleanup');
-    if (res.hasStrings) unlock('mod-encoding', 'list-encoding', res.stringCount, res.stringDetails, 'encoding');
     
-    document.getElementById('scan-status').innerHTML = `<strong>Scan Complete:</strong> ${res.totalIssues} issues found.`;
+    // 1. Missing Values
+    if (res.hasMissing) {
+      unlock('mod-missing', 'list-missing', res.missingCount, res.missingDetails, 'missing');
+    }
+    
+    // 2. Dates (Calculated Sum for the Badge)
+    let totalDateObservations = 0;
+    if (res.dateDetails) {
+      for (let count of Object.values(res.dateDetails)) {
+        totalDateObservations += count;
+      }
+    }
+    if (totalDateObservations > 0) {
+      unlock('mod-dates', 'list-dates', totalDateObservations, res.dateDetails, 'date');
+    }
+    
+    // 3. Outliers
+    if (res.hasOutliers) {
+      unlock('mod-scaling', 'list-outliers', res.outlierCount, res.outlierDetails, 'scaling');
+    }
+    
+    // 4. Categorical Logic (Cleanup & Encoding)
+    const catDetails = {};
+    let totalCatObservations = 0;
+    const schemaItems = Array.from(document.querySelectorAll('.schema-item'));
+    
+    for (const [colName, count] of Object.entries(res.stringDetails || {})) {
+      const item = schemaItems.find(i => i.querySelector('.col-name').innerText === colName);
+      if (item && item.querySelector('.schema-type').value === 'Categorical') {
+        catDetails[colName] = count;
+        totalCatObservations += count;
+      }
+    }
+
+    if (totalCatObservations > 0) {
+      unlock('mod-cleanup', 'list-cleanup', res.cleanupCount, catDetails, 'cleanup');
+      unlock('mod-encoding', 'list-encoding', totalCatObservations, catDetails, 'encoding');
+    }
+    
+    document.getElementById('scan-status').innerHTML = 
+      `<strong>Scan Complete:</strong> Found ${res.totalIssues} potential improvements.`;
   }
 
   function unlock(modId, listId, count, details, type) {
     const mod = document.getElementById(modId);
+    if (!mod) return; // Safety check
+
     mod.classList.remove('disabled-module');
-    mod.querySelector('.badge').innerText = count;
+    
+    // Update the main module badge (the pill in the header)
+    const badge = mod.querySelector('.badge');
+    if (badge) badge.innerText = count;
     
     let html = '';
     for (const [colName, obsCount] of Object.entries(details)) {
       // Get the type from the schema list to determine dropdown options
       const schemaItem = Array.from(document.querySelectorAll('.schema-item'))
         .find(i => i.querySelector('.col-name').innerText === colName);
+      
+      if (!schemaItem) continue; // Skip if variable not found in current schema
+
       const colIdx = schemaItem.querySelector('.schema-check').value;
       const colType = schemaItem.querySelector('.schema-type').value;
       
@@ -116,7 +176,6 @@
         } else {
           options = `<option value="FORWARD">Forward Fill</option><option value="MEDIAN">Median Date</option><option value="CUSTOM">Custom Date</option>`;
         }
-        // ADD THE DROP OPTION TO ALL TYPES
         options += `<option value="DROP">❌ Drop Observations (Delete Rows)</option>`;
 
         html += `
@@ -152,7 +211,10 @@
           <div class="config-row" data-colname="${colName}">
             <div class="config-header">
               <input type="checkbox" class="encoding-check" value="${colIdx}" onchange="handleEncodingSelection(this)">
-              <div class="header-text"><strong>${colName}</strong></div>
+              <div class="header-text">
+                <strong>${colName}</strong>
+                <span class="count-pill">${obsCount} items</span> 
+              </div>
             </div>
             <div class="folder-content" style="display:none;">
               <select class="encoding-method" onchange="handleEncodingMethodChange(this)">
@@ -161,7 +223,7 @@
                 <option value="LABEL">Label Encoding (Ordinal)</option>
               </select>
               <div class="ordinal-sort-area" style="display:none; margin-top:10px;">
-                <p class="instruction">Drag/Move to set order (Top = 0):</p>
+                <p class="instruction">Drag to set order (Top = 0):</p>
                 <ul class="sortable-list"></ul>
               </div>
             </div>
@@ -367,5 +429,20 @@
     });
     document.getElementById('encoding-apply-btn').disabled = !any;
   }
+
+
+  document.querySelectorAll('details').forEach((detail) => {
+    detail.addEventListener('click', (e) => {
+      // We only care about opening
+      if (!detail.hasAttribute('open')) {
+        // Close all other details elements
+        document.querySelectorAll('details').forEach((otherDetail) => {
+          if (otherDetail !== detail) {
+            otherDetail.removeAttribute('open');
+          }
+        });
+      }
+    });
+  });
 
 </script>
