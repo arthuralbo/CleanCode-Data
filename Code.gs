@@ -36,75 +36,106 @@ function getInitialSchema() {
 
 function performDiagnostic(selections) {
   const sheet = SpreadsheetApp.getActiveSheet();
-  const range = sheet.getDataRange();
-  const data = range.getValues();
+  const data = sheet.getDataRange().getValues();
   const headers = data[0];
   const rows = data.slice(1);
 
+  // --- PHASE 1: STRICT VALIDATION GATEKEEPER ---
+  // We check for "Dealbreakers" before we even start counting issues.
   for (let sel of selections) {
     const colIdx = sel.index - 1;
+    const colName = headers[colIdx];
+
     for (let r = 0; r < rows.length; r++) {
       const cell = rows[r][colIdx];
-      if (cell === "" || cell === null) continue;
-      if (sel.type === "Numeric" && isNaN(parseFloat(cell))) {
-        sheet.getRange(r + 2, sel.index).activate();
-        return { error: `Type Mismatch in [${headers[colIdx]}] at Row ${r + 2}: Found "${cell}" (cannot be Numeric).` };
+      if (cell === "" || cell === null) continue; 
+
+      if (sel.type === "Numeric") {
+        const isInvalidNumeric = isNaN(parseFloat(cell)) || (typeof cell === 'string' && /[a-zA-Z]/.test(cell));
+        if (isInvalidNumeric) {
+          sheet.getRange(r + 2, sel.index).activate();
+          return { error: `Numeric Error: Found "${cell}" in [${colName}] at Row ${r + 2}.` };
+        }
+      }
+
+      if (sel.type === "Date") {
+        let d = (cell instanceof Date) ? cell : new Date(cell);
+        if (isNaN(d.getTime())) {
+          sheet.getRange(r + 2, sel.index).activate();
+          return { error: `Date Error: Found "${cell}" in [${colName}] at Row ${r + 2}.` };
+        }
       }
     }
-    const colRange = sheet.getRange(2, sel.index, sheet.getLastRow() - 1, 1);
-    if (sel.type === "Numeric") colRange.setNumberFormat("#.####################");
-    else if (sel.type === "Categorical") colRange.setNumberFormat("@");
   }
 
+  // --- PHASE 2: REPORT GENERATION ---
+  // If we reach here, the data types are valid. Now we count for the Badges.
   let report = {
     hasMissing: false, missingCount: 0, missingDetails: {},
     hasDates: false, dateCount: 0, dateDetails: {},
     hasOutliers: false, outlierCount: 0, outlierDetails: {},
-    hasStrings: false, stringCount: 0, stringDetails: {},
+    hasStrings: false, stringCount: 0, stringDetails: {}, 
     hasCleanup: false, cleanupCount: 0, cleanupDetails: {},
-    totalChecked: selections.length, totalIssues: 0
+    totalIssues: 0
   };
 
   selections.forEach(sel => {
     const colIdx = sel.index - 1;
     const colName = headers[colIdx];
-    let colValues = [];
+    let colNumericValues = [];
+
     rows.forEach(row => {
       const cell = row[colIdx];
+      
+      // 1. Missing Values
       if (cell === "" || cell === null) {
-        report.hasMissing = true; report.missingCount++;
+        report.hasMissing = true; 
+        report.missingCount++;
         report.missingDetails[colName] = (report.missingDetails[colName] || 0) + 1;
-        return; 
+        return;
       }
-      if (typeof cell === 'string') {
-        report.hasStrings = true; report.stringCount++;
+
+      // 2. Categorical (Cleanup & Encoding)
+      if (sel.type === "Categorical") {
+        report.hasStrings = true;
         report.stringDetails[colName] = (report.stringDetails[colName] || 0) + 1;
-        if (cell !== cell.trim() || cell !== cell.toLowerCase()) {
-          report.hasCleanup = true; report.cleanupCount++;
+        
+        // Detect if cleanup is needed
+        if (typeof cell === 'string' && (cell !== cell.trim() || cell !== cell.toLowerCase())) {
+          report.hasCleanup = true; 
+          report.cleanupCount++;
           report.cleanupDetails[colName] = (report.cleanupDetails[colName] || 0) + 1;
         }
       }
-      if (cell instanceof Date || sel.type === "Date") {
-        report.hasDates = true; report.dateCount++;
+
+      // 3. Dates
+      if (sel.type === "Date") {
+        report.hasDates = true;
+        // This ensures the Date Badge pill gets a value
         report.dateDetails[colName] = (report.dateDetails[colName] || 0) + 1;
       }
-      if (sel.type === "Numeric" && !isNaN(parseFloat(cell))) colValues.push(parseFloat(cell));
+
+      // 4. Numeric (for Outliers)
+      if (sel.type === "Numeric") {
+        colNumericValues.push(parseFloat(cell));
+      }
     });
 
-    if (sel.type === "Numeric" && colValues.length > 2) {
-      const n = colValues.length;
-      const mean = colValues.reduce((a, b) => a + b) / n;
-      const stdDev = Math.sqrt(colValues.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / n);
-      if (stdDev > 0) {
-        const outliers = colValues.filter(x => Math.abs(x - mean) > (3 * stdDev));
-        if (outliers.length > 0) {
-          report.hasOutliers = true; report.outlierCount += outliers.length;
-          report.outlierDetails[colName] = outliers.length;
-        }
+    // 5. Outlier Calculation
+    if (sel.type === "Numeric" && colNumericValues.length > 2) {
+      const n = colNumericValues.length;
+      const mean = colNumericValues.reduce((a, b) => a + b) / n;
+      const stdDev = Math.sqrt(colNumericValues.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / n);
+      const outliers = colNumericValues.filter(x => Math.abs(x - mean) > (3 * stdDev));
+      if (outliers.length > 0) {
+        report.hasOutliers = true; 
+        report.outlierCount += outliers.length;
+        report.outlierDetails[colName] = (report.outlierDetails[colName] || 0) + outliers.length;
       }
     }
   });
-  report.totalIssues = report.missingCount + report.outlierCount + report.stringCount + report.cleanupCount;
+
+  report.totalIssues = report.missingCount + report.outlierCount + report.cleanupCount;
   return report;
 }
 
@@ -315,6 +346,9 @@ function applyStructuralCleanup(configs) {
 /**
  * Handles Categorical Encoding Transformations
  */
+/**
+ * Handles Categorical Encoding Transformations while preserving nulls
+ */
 function applyEncodingTransformation(configs) {
   const sheet = SpreadsheetApp.getActiveSheet();
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -326,25 +360,33 @@ function applyEncodingTransformation(configs) {
     const rawData = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues().map(r => r[0].toString());
 
     if (config.method === "ONE-HOT") {
-      const uniqueValues = [...new Set(rawData)].filter(v => v !== "");
+      // Get unique values but exclude the empty string from becoming its own column
+      const uniqueValues = [...new Set(rawData)].filter(v => v !== "" && v !== "null" && v !== "undefined");
+      
       uniqueValues.forEach((val, i) => {
         const newColIdx = colIdx + i;
         sheet.insertColumnAfter(newColIdx);
         sheet.getRange(1, newColIdx + 1).setValue(`${colName}_${val}`).setFontWeight("bold");
         
-        const dummyData = rawData.map(r => [r === val ? 1 : 0]);
+        const dummyData = rawData.map(r => {
+          if (r === "" || r === "null") return [""]; // KEEP EMPTY
+          return [r === val ? 1 : 0];
+        });
         sheet.getRange(2, newColIdx + 1, dummyData.length, 1).setValues(dummyData);
       });
     } 
     else if (config.method === "LABEL") {
-      // config.order is an array like ["Small", "Medium", "Large"]
       const map = {};
       config.order.forEach((val, i) => map[val] = i);
 
       sheet.insertColumnAfter(colIdx);
       sheet.getRange(1, colIdx + 1).setValue(`${colName}_encoded`).setFontWeight("bold");
 
-      const encodedData = rawData.map(r => [map[r] !== undefined ? map[r] : -1]);
+      const encodedData = rawData.map(r => {
+        // If the original cell is empty, return empty instead of -1
+        if (r === "" || r === "null") return [""]; 
+        return [map[r] !== undefined ? map[r] : ""]; 
+      });
       sheet.getRange(2, colIdx + 1, encodedData.length, 1).setValues(encodedData);
     }
   });
