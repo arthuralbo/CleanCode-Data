@@ -327,4 +327,65 @@
     vertical-align: middle;
   }
 
+  .sortable-list { list-style: none; padding: 0; margin: 0; border: 1px solid #eee; border-radius: 4px; }
+  .sort-item { 
+    padding: 6px; 
+    background: #fff; 
+    border-bottom: 1px solid #eee; 
+    font-size: 10px; 
+    display: flex; 
+    align-items: center; 
+  }
+  .drag-handle { cursor: move; margin-right: 10px; color: #ccc; font-size: 14px; }
+  .sort-item:last-child { border-bottom: none; }
+
+  /* Container for the sortable items */
+  .sortable-list {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0;
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .sort-item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background: #fff;
+    border-bottom: 1px solid #f1f3f4;
+    font-size: 12px;
+    color: #3c4043;
+  }
+
+  .sort-item:last-child { border-bottom: none; }
+
+  .drag-handle {
+    cursor: grab;
+    margin-right: 12px;
+    color: #bdc1c6;
+    font-size: 16px;
+    user-select: none;
+  }
+
+  .drag-handle:active { cursor: grabbing; }
+
+  /* SortableJS States */
+  .sortable-ghost {
+    opacity: 0.4;
+    background-color: #e8f0fe !important;
+    border: 1px dashed #1a73e8;
+  }
+
+  .sortable-chosen {
+    background-color: #f8f9fa;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+
+  .sortable-drag {
+    opacity: 1;
+    background-color: #fff;
+  }
+
 </style>
