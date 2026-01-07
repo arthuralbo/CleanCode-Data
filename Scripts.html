@@ -49,19 +49,59 @@
     const mod = document.getElementById(modId);
     mod.classList.remove('disabled-module');
     mod.querySelector('.badge').innerText = count;
+    
     let html = '';
-    for (const [colName, c] of Object.entries(details)) {
-      const colIdx = Array.from(document.querySelectorAll('.schema-item')).find(i => i.querySelector('.col-name').innerText === colName).querySelector('.schema-check').value;
+    for (const [colName, obsCount] of Object.entries(details)) {
+      const colIdx = Array.from(document.querySelectorAll('.schema-item'))
+        .find(i => i.querySelector('.col-name').innerText === colName).querySelector('.schema-check').value;
       
       if (type === 'scaling') {
-        html += `<div class="config-row"><div class="config-header"><input type="checkbox" class="scaling-check" value="${colIdx}" onchange="toggleFolder(this)"><strong>${colName}</strong></div>
-                 <div class="folder-content" style="display:none;"><select class="scaling-method" onchange="validateScalingInputs()"><option value="" disabled selected>Select Strategy...</option><option value="Z-SCORE">Z-Score</option><option value="MIN-MAX">Min-Max</option><option value="LOG">Log Transform</option><option value="WINSORIZE">Outlier Capping</option></select></div></div>`;
+        html += `
+          <div class="config-row">
+            <div class="config-header">
+              <input type="checkbox" class="scaling-check" value="${colIdx}" onchange="toggleFolder(this)">
+              <div class="header-text">
+                <strong>${colName}</strong>
+                <span class="count-pill">${obsCount} outliers</span>
+              </div>
+            </div>
+            <div class="folder-content" style="display:none;">
+              <p class="instruction">Scaling Strategy:</p>
+              <select class="scaling-method" onchange="validateScalingInputs()">
+                <option value="" disabled selected>Select Strategy...</option>
+                <option value="Z-SCORE">Z-Score (Standardization)</option>
+                <option value="MIN-MAX">Min-Max (0 to 1)</option>
+                <option value="LOG">Log Transform (ln(1+x))</option>
+                <option value="WINSORIZE">Outlier Capping (3rd Sigma)</option>
+                <option value="DROP">❌ Drop Observations</option>
+              </select>
+            </div>
+          </div>`;
       } else if (type === 'date') {
-        html += `<div class="config-row"><div class="config-header"><input type="checkbox" class="date-fix-check" value="${colIdx}" onchange="toggleFolder(this)"><strong>${colName}</strong></div>
-                 <div class="folder-content" style="display:none;"><p class="instruction">Source Style:</p><select class="date-locale" onchange="validateDateInputs()"><option value="" disabled selected>Locale...</option><option value="US">US (MDY)</option><option value="EU">EU (DMY)</option></select>
-                 <p class="instruction">Output Format:</p><select class="date-format" onchange="validateDateInputs()"><option value="" disabled selected>Format...</option><option value="ISO">ISO 8601</option><option value="UNIX">Unix Timestamp</option></select></div></div>`;
-      } else {
-        html += `<div class="var-row"><span>${colName}</span><span class="var-count">${c}</span></div>`;
+        html += `
+          <div class="config-row">
+            <div class="config-header">
+              <input type="checkbox" class="date-fix-check" value="${colIdx}" onchange="toggleFolder(this)">
+              <div class="header-text">
+                <strong>${colName}</strong>
+                <span class="count-pill">${obsCount} dates</span>
+              </div>
+            </div>
+            <div class="folder-content" style="display:none;">
+              <p class="instruction">Source Style:</p>
+              <select class="date-locale" onchange="validateDateInputs()">
+                <option value="" disabled selected>Locale...</option>
+                <option value="US">US (MDY)</option>
+                <option value="EU">EU (DMY)</option>
+              </select>
+              <p class="instruction">Output Format:</p>
+              <select class="date-format" onchange="validateDateInputs()">
+                <option value="" disabled selected>Format...</option>
+                <option value="ISO">ISO 8601</option>
+                <option value="UNIX">Unix Timestamp</option>
+              </select>
+            </div>
+          </div>`;
       }
     }
     document.getElementById(listId).innerHTML = html;
