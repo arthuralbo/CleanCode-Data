@@ -147,30 +147,65 @@ function applyDateTransformation(dateConfigs) {
 
 function applyScalingTransformation(scalingConfigs) {
   const sheet = SpreadsheetApp.getActiveSheet();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const fullData = sheet.getDataRange().getValues();
+  const headers = fullData[0];
+  const rowsToDelete = new Set(); // Using a Set to avoid duplicate row deletions
+
+  // Sort descending by index to handle column additions correctly
   const sortedConfigs = scalingConfigs.sort((a, b) => b.index - a.index);
 
   sortedConfigs.forEach(config => {
     const colIdx = config.index;
-    sheet.insertColumnAfter(colIdx);
-    sheet.getRange(1, colIdx + 1).setValue(headers[colIdx-1] + "_" + config.method.toLowerCase()).setFontWeight("bold");
-    const raw = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues();
-    const nums = raw.map(r => parseFloat(r[0])).filter(v => !isNaN(v));
-    const n = nums.length, mean = nums.reduce((a,b)=>a+b,0)/n, min = Math.min(...nums), max = Math.max(...nums);
-    const std = Math.sqrt(nums.reduce((s,x)=>s+Math.pow(x-mean,2),0)/n);
+    const rawValues = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues();
+    const numericValues = rawValues.map(r => parseFloat(r[0])).filter(v => !isNaN(v));
 
-    const transformed = raw.map(row => {
-      let x = parseFloat(row[0]);
-      if (isNaN(x)) return [row[0]];
-      if (config.method === "Z-SCORE") return [(std === 0) ? 0 : (x - mean) / std];
-      if (config.method === "MIN-MAX") return [(max === min) ? 0 : (x - min) / (max - min)];
-      if (config.method === "LOG") return [x < 0 ? 0 : Math.log1p(x)];
-      if (config.method === "WINSORIZE") {
-        let u = mean + 3*std, l = mean - 3*std;
-        return [x > u ? u : (x < l ? l : x)];
-      }
-    });
-    sheet.getRange(2, colIdx + 1, transformed.length, 1).setValues(transformed).setNumberFormat("0.0000");
+    if (numericValues.length < 2) return;
+
+    // Calculate Stats for Thresholds
+    const n = numericValues.length;
+    const mean = numericValues.reduce((a, b) => a + b, 0) / n;
+    const stdDev = Math.sqrt(numericValues.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / n);
+    const upper = mean + (3 * stdDev);
+    const lower = mean - (3 * stdDev);
+
+    if (config.method === "DROP") {
+      // 1. COLLECT ROWS FOR DELETION
+      rawValues.forEach((row, i) => {
+        const val = parseFloat(row[0]);
+        if (!isNaN(val) && (val > upper || val < lower)) {
+          rowsToDelete.add(i + 2); // +2 for header and 1-based indexing
+        }
+      });
+    } else {
+      // 2. STANDARD SCALING (Create New Column)
+      const newHeader = `${headers[colIdx - 1]}_${config.method.toLowerCase()}`;
+      sheet.insertColumnAfter(colIdx);
+      sheet.getRange(1, colIdx + 1).setValue(newHeader).setFontWeight("bold");
+
+      const transformed = rawValues.map(row => {
+        let x = parseFloat(row[0]);
+        if (isNaN(x)) return [row[0]];
+        let res;
+        if (config.method === "Z-SCORE") res = (stdDev === 0) ? 0 : (x - mean) / stdDev;
+        else if (config.method === "MIN-MAX") {
+          const min = Math.min(...numericValues);
+          const max = Math.max(...numericValues);
+          res = (max === min) ? 0 : (x - min) / (max - min);
+        }
+        else if (config.method === "LOG") res = x < 0 ? 0 : Math.log1p(x);
+        else if (config.method === "WINSORIZE") res = x > upper ? upper : (x < lower ? lower : x);
+        return [res];
+      });
+      sheet.getRange(2, colIdx + 1, transformed.length, 1).setValues(transformed).setNumberFormat("0.0000");
+    }
   });
+
+  // 3. PHYSICAL DELETION (Process backwards to keep indices valid)
+  if (rowsToDelete.size > 0) {
+    const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
+    sortedRows.forEach(rowIdx => sheet.deleteRow(rowIdx));
+    return `Cleaned! Deleted ${rowsToDelete.size} rows and applied scaling.`;
+  }
+
   return "Scaling applied successfully.";
 }
