@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html>
-  <head><base target="_top"><?!= include('Styles'); ?></head>
+  <head>
+    <base target="_top">
+    <?!= include('Styles'); ?>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  </head>
   <body>
     <div class="sidebar-wrapper">
       <header><h2>Data Prep Engine</h2><p class="subtitle">1. Define Schema & Scan</p></header>
@@ -38,6 +42,13 @@
           <div class="module-content">
             <div id="list-cleanup" class="variable-config-container"></div>
             <button id="cleanup-apply-btn" class="secondary-btn" onclick="runCleanupFix()">Apply Cleanup</button>
+          </div>
+        </details>
+        <details id="mod-encoding" class="module-card disabled-module">
+          <summary>🔢 Categorical Encoding <span class="badge"></span></summary>
+          <div class="module-content">
+            <div id="list-encoding" class="variable-config-container"></div>
+            <button id="encoding-apply-btn" class="secondary-btn" disabled onclick="runEncodingFix()">Apply Encoding</button>
           </div>
         </details>
       </main>
