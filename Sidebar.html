@@ -26,8 +26,20 @@
             <button id="scaling-apply-btn" class="secondary-btn" disabled onclick="runScalingFix()">Apply Scaling</button>
           </div>
         </details>
-        <details id="mod-missing" class="module-card disabled-module"><summary>🩹 Missing Values <span class="badge"></span></summary><div class="module-content" id="list-missing"></div></details>
-        <details id="mod-cleanup" class="module-card disabled-module"><summary>🧹 Structural Cleanup <span class="badge"></span></summary><div class="module-content" id="list-cleanup"></div></details>
+        <details id="mod-missing" class="module-card disabled-module">
+          <summary>🩹 Missing Values <span class="badge"></span></summary>
+          <div class="module-content">
+            <div id="list-missing" class="variable-config-container"></div>
+            <button id="missing-apply-btn" class="secondary-btn" disabled onclick="runMissingFix()">Apply Imputation</button>
+          </div>
+        </details>
+        <details id="mod-cleanup" class="module-card disabled-module">
+          <summary>🧹 Structural Cleanup <span class="badge"></span></summary>
+          <div class="module-content">
+            <div id="list-cleanup" class="variable-config-container"></div>
+            <button id="cleanup-apply-btn" class="secondary-btn" onclick="runCleanupFix()">Apply Cleanup</button>
+          </div>
+        </details>
       </main>
       <footer><div id="log-console">Ready.</div></footer>
     </div>
