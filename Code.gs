@@ -209,3 +209,105 @@ function applyScalingTransformation(scalingConfigs) {
 
   return "Scaling applied successfully.";
 }
+
+
+function applyMissingTransformation(configs) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rowsToDelete = new Set();
+  
+  // Sort descending by index to handle column additions safely
+  const sortedConfigs = configs.sort((a, b) => b.index - a.index);
+
+  sortedConfigs.forEach(config => {
+    const colIdx = config.index;
+    const raw = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues();
+
+    if (config.method === "DROP") {
+      // COLLECT ROWS FOR DELETION
+      raw.forEach((row, i) => {
+        if (row[0] === "" || row[0] === null) {
+          rowsToDelete.add(i + 2); // +2 for header offset
+        }
+      });
+    } else {
+      // CALCULATE STATS FOR IMPUTATION
+      const nums = raw.map(r => parseFloat(r[0])).filter(v => !isNaN(v));
+      const mean = nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 0;
+      const median = nums.length ? nums.sort((a,b)=>a-b)[Math.floor(nums.length/2)] : 0;
+      
+      const modeMap = {};
+      raw.forEach(r => { if(r[0]) modeMap[r[0]] = (modeMap[r[0]] || 0) + 1; });
+      const mode = Object.keys(modeMap).reduce((a, b) => modeMap[a] > modeMap[b] ? a : b, "");
+
+      // Prepare New Column
+      sheet.insertColumnAfter(colIdx);
+      sheet.getRange(1, colIdx + 1).setValue(headers[colIdx-1] + "_imputed").setFontWeight("bold");
+
+      const processed = raw.map((row, i) => {
+        let val = row[0];
+        if (val !== "" && val !== null) return [val];
+        
+        switch (config.method) {
+          case "MEAN": return [mean];
+          case "MEDIAN": return [median];
+          case "ZERO": return [0];
+          case "MODE": return [mode];
+          case "LABEL": return ["Unknown"];
+          case "CUSTOM": return [config.customVal];
+          case "FORWARD": return i > 0 ? [raw[i-1][0]] : [""];
+          default: return [""];
+        }
+      });
+      sheet.getRange(2, colIdx + 1, processed.length, 1).setValues(processed);
+    }
+  });
+
+  // EXECUTE ROW DELETIONS
+  if (rowsToDelete.size > 0) {
+    const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
+    sortedRows.forEach(rowIdx => sheet.deleteRow(rowIdx));
+    return `Cleaned! Deleted ${rowsToDelete.size} rows with missing values and imputed others.`;
+  }
+
+  return "Missing values imputed successfully.";
+}
+
+/**
+ * Applies multiple structural fixes to selected columns.
+ */
+function applyStructuralCleanup(configs) {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  
+  // Sort descending to handle column insertion correctly
+  const sortedConfigs = configs.sort((a, b) => b.index - a.index);
+
+  sortedConfigs.forEach(config => {
+    const colIdx = config.index;
+    const colName = headers[colIdx - 1];
+    const newHeader = `${colName}_cleaned`;
+    
+    sheet.insertColumnAfter(colIdx);
+    sheet.getRange(1, colIdx + 1).setValue(newHeader).setFontWeight("bold");
+
+    const rawData = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues();
+    
+    const cleaned = rawData.map(row => {
+      let val = row[0].toString();
+      if (!val) return [""];
+
+      // Apply transformations based on selected checkboxes
+      if (config.doTrim) val = val.trim();
+      if (config.doLower) val = val.toLowerCase();
+      if (config.doUpper) val = val.toUpperCase();
+      if (config.doAlphaNum) val = val.replace(/[^a-z0-9 ]/gi, '');
+      
+      return [val];
+    });
+
+    sheet.getRange(2, colIdx + 1, cleaned.length, 1).setValues(cleaned);
+  });
+
+  return "Structural cleanup finished. New columns created.";
+}
