@@ -1,16 +1,30 @@
 /**
- * DATA PREP ENGINE - CORE
+ *  CleanCode Data - CORE
  */
 
 function onOpen() {
-  SpreadsheetApp.getUi().createAddonMenu()
-      .addItem('Launch Data Prep', 'showSidebar')
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('CleanCode Data')
+      .addItem('Launch CleanCode Data', 'showSidebar')
+      .addSeparator()
+      .addItem('📖 View Documentation', 'openExternalDocs')
       .addToUi();
+}
+
+/**
+ * Opens a Google Doc or Website in a new tab
+ */
+function openExternalDocs() {
+  var url = "https://docs.google.com/document/d/1jVKmuWzFExLljsKnTfGLQ-A_6L50DwRhI9zFtL9B3Hc/edit?tab=t.0";
+  var html = HtmlService.createHtmlOutput(
+    '<script>window.open("' + url + '", "_blank"); google.script.host.close();</script>'
+  ).setWidth(10).setHeight(10);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Opening Documentation...');
 }
 
 function showSidebar() {
   const html = HtmlService.createTemplateFromFile('Sidebar')
-      .evaluate().setTitle('Data Prep Engine');
+      .evaluate().setTitle('CleanCode Data');
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
@@ -139,6 +153,9 @@ function performDiagnostic(selections) {
   return report;
 }
 
+/**
+ * Transforms messy date columns based on user-selected Locale and Format.
+ */
 function applyDateTransformation(dateConfigs) {
   const sheet = SpreadsheetApp.getActiveSheet();
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
