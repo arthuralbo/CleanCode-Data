@@ -7,8 +7,10 @@
   function initAccordion() {
     const allDetails = document.querySelectorAll('details');
     allDetails.forEach((targetDetail) => {
-      targetDetail.addEventListener('click', (e) => {
-        // If we are about to open this one...
+      // We use the 'click' event on the summary to intercept the toggle
+      const summary = targetDetail.querySelector('summary');
+      summary.addEventListener('click', (e) => {
+        // If we are clicking to open...
         if (!targetDetail.hasAttribute('open')) {
           allDetails.forEach((otherDetail) => {
             if (otherDetail !== targetDetail) {
@@ -153,18 +155,22 @@
               </div>
             </div>
             <div class="folder-content" style="display:none;">
-              <p class="instruction">Source Style:</p>
+              <p class="instruction">Identify Current Style:</p>
               <select class="date-locale" onchange="validateDateInputs()">
-                <option value="" disabled selected>Locale...</option>
-                <option value="US">US (MDY)</option>
-                <option value="EU">EU (DMY)</option>
+                <option value="" disabled selected>Current Style...</option>
+                <option value="US">Month / Day / Year</option>
+                <option value="EU">Day / Month / Year</option>
+                <option value="EU">Year / Month / Day</option>
               </select>
               <p class="instruction">Output Format:</p>
               <select class="date-format" onchange="validateDateInputs()">
-                <option value="" disabled selected>Format...</option>
-                <option value="ISO">ISO 8601</option>
-                <option value="UNIX">Unix Timestamp</option>
+                <option value="" disabled selected>Output Format...</option>
+                <option value="ISO">Standard (yyyy-mm-dd)</option>
+                <option value="UNIX">Computer Format (Unix Timestamp)</option>
               </select>
+              <div class="date-preview" style="font-size:9px; color:var(--google-blue); margin-top:5px; font-style:italic;">
+                * Dates like "02-March" will be auto-detected.
+              </div>
             </div>
           </div>`;
       } else if (type === 'missing') {
@@ -288,7 +294,33 @@
   function toggleLoading(b, load, txt) { b.disabled = load; b.innerText = txt; b.style.opacity = load ? "0.5" : "1"; document.querySelector('main').style.pointerEvents = load ? 'none' : 'auto'; }
 
 
-  function resetUI() { ['mod-missing', 'mod-dates', 'mod-scaling', 'mod-cleanup', 'mod-encoding'].forEach(id => { const el = document.getElementById(id); el.classList.add('disabled-module'); el.removeAttribute('open'); }); }
+  function resetUI() {
+    // 1. Clear the main status
+    document.getElementById('scan-status').innerHTML = "> Initializing scan...";
+    
+    // 2. Target all modules
+    const modules = document.querySelectorAll('.module-card');
+    modules.forEach(mod => {
+      // Re-apply the disabled look
+      mod.classList.add('disabled-module');
+      mod.removeAttribute('open'); // Close any open sections
+      
+      // Reset the Badge (Pill)
+      const badge = mod.querySelector('.badge');
+      if (badge) {
+        badge.innerText = ''; // Remove the number
+        badge.classList.remove('filled'); // Custom class for the "filled" look
+      }
+      
+      // Clear the internal list of variables
+      const listContainer = mod.querySelector('.variable-config-container');
+      if (listContainer) listContainer.innerHTML = '';
+      
+      // Disable the apply button inside
+      const applyBtn = mod.querySelector('.secondary-btn');
+      if (applyBtn) applyBtn.disabled = true;
+    });
+  }
 
   function toggleAllSchema(v) { document.querySelectorAll('.schema-check').forEach(c => c.checked = v); }
 
