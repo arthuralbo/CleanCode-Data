@@ -34,7 +34,7 @@
     position: relative; /* Required for absolute positioning of mini-btns */
     background: var(--white);
     border: 1px solid var(--border-color);
-    padding: 12px;
+    padding: 14px 12px 12px 12px;
     border-radius: 8px;
     box-shadow: 0 1px 2px 0 rgba(60,64,67,.3);
     margin-bottom: 12px;
@@ -42,7 +42,7 @@
 
   .controls {
     position: absolute;
-    top: 12px;
+    top: 14px;
     right: 12px;
     display: flex;
     gap: 4px;
@@ -256,7 +256,15 @@
   .sortable-ghost { opacity: 0.3; background: #e8f0fe !important; }
 
   /* 9. Helpers */
-  .instruction { font-size: 10px; color: var(--text-sub); margin: 8px 0 4px 0; font-weight: bold; text-transform: uppercase; }
+  .instruction { 
+    font-size: 10px; 
+    color: var(--text-sub); 
+    margin: 0 0 8px 0; 
+    font-weight: bold; 
+    text-transform: uppercase; 
+    padding-right: 70px; /* THIS CREATES THE BUFFER FOR THE BUTTONS */
+    line-height: 1.3;
+  }
   select, .custom-input { width: 100%; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; margin-top: 4px; }
   .check-label { display: block; margin: 6px 0; cursor: pointer; font-size: 11px; }
 
@@ -269,6 +277,35 @@
 
   .module-card {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+
+  /* Highlights the currently open module */
+  details[open] {
+    border: 1px solid var(--google-blue);
+    box-shadow: 0 2px 6px rgba(26, 115, 232, 0.1);
+  }
+
+  details[open] summary {
+    color: var(--google-blue);
+    background-color: #f8f9ff;
+    border-bottom: 1px solid #e8f0fe;
+  }
+
+  @keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    50% { transform: translateX(4px); }
+    75% { transform: translateX(-4px); }
+    100% { transform: translateX(0); }
+  }
+
+  .error-pulse {
+    animation: shake 0.4s ease-in-out;
+    padding: 8px;
+    background: #fdf2f2;
+    border-left: 4px solid #d93025;
+    border-radius: 4px;
   }
 
 </style>
