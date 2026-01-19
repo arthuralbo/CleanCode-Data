@@ -1,25 +1,13 @@
 /**
- *  CleanCode Data - CORE
+ * @OnlyCurrentDoc
+ * CleanCode Data Engine
  */
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('CleanCode Data')
       .addItem('Launch CleanCode Data', 'showSidebar')
-      .addSeparator()
-      .addItem('📖 View Documentation', 'openExternalDocs')
       .addToUi();
-}
-
-/**
- * Opens a Google Doc or Website in a new tab
- */
-function openExternalDocs() {
-  var url = "https://docs.google.com/document/d/1jVKmuWzFExLljsKnTfGLQ-A_6L50DwRhI9zFtL9B3Hc/edit?tab=t.0";
-  var html = HtmlService.createHtmlOutput(
-    '<script>window.open("' + url + '", "_blank"); google.script.host.close();</script>'
-  ).setWidth(10).setHeight(10);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Opening Documentation...');
 }
 
 function showSidebar() {
@@ -55,20 +43,24 @@ function performDiagnostic(selections) {
   const rows = data.slice(1);
 
   // --- PHASE 1: STRICT VALIDATION GATEKEEPER ---
-  // We check for "Dealbreakers" before we even start counting issues.
   for (let sel of selections) {
     const colIdx = sel.index - 1;
-    const colName = headers[colIdx];
+    const colName = headers[colIdx] || `Colonne ${sel.index}`;
 
     for (let r = 0; r < rows.length; r++) {
       const cell = rows[r][colIdx];
-      if (cell === "" || cell === null) continue; 
+      
+      // On ignore les cellules vides pour la validation de type
+      if (cell === "" || cell === null || cell === undefined) continue; 
 
       if (sel.type === "Numeric") {
-        const isInvalidNumeric = isNaN(parseFloat(cell)) || (typeof cell === 'string' && /[a-zA-Z]/.test(cell));
-        if (isInvalidNumeric) {
-          sheet.getRange(r + 2, sel.index).activate();
-          return { error: `Numeric Error: Found "${cell}" in [${colName}] at Row ${r + 2}.` };
+        // Vérifie si la valeur est un nombre ou peut être convertie proprement
+        const isInvalid = isNaN(parseFloat(cell)) || (typeof cell === 'string' && /[a-zA-Z]/.test(cell));
+        if (isInvalid) {
+          sheet.getRange(r + 2, sel.index).activate(); // Sélectionne la cellule fautive
+          return { 
+            error: `Numeric Error: The value "${cell}" in [${colName}] at Row ${r + 2} is not a number.` 
+          };
         }
       }
 
@@ -76,7 +68,9 @@ function performDiagnostic(selections) {
         let d = (cell instanceof Date) ? cell : new Date(cell);
         if (isNaN(d.getTime())) {
           sheet.getRange(r + 2, sel.index).activate();
-          return { error: `Date Error: Found "${cell}" in [${colName}] at Row ${r + 2}.` };
+          return { 
+            error: `Erreur Date : La valeur "${cell}" dans [${colName}] à la ligne ${r + 2} n'est pas une date valide.` 
+          };
         }
       }
     }
@@ -158,39 +152,51 @@ function performDiagnostic(selections) {
  */
 function applyDateTransformation(dateConfigs) {
   const sheet = SpreadsheetApp.getActiveSheet();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
   const timezone = Session.getScriptTimeZone();
+  
+  // Sort descending to handle column shifts
   const sortedConfigs = dateConfigs.sort((a, b) => b.index - a.index);
 
   sortedConfigs.forEach(config => {
     const colIdx = config.index;
-    sheet.insertColumnAfter(colIdx);
-    sheet.getRange(1, colIdx + 1).setValue(headers[colIdx - 1] + "_cleaned").setFontWeight("bold");
-
-    const raw = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues();
-    const processed = raw.map(row => {
-      let val = row[0];
-      if (!val) return [""];
+    const colName = headers[colIdx - 1];
+    const raw = data.slice(1).map(r => r[colIdx - 1]);
+    
+    const processed = raw.map(val => {
+      if (val === "" || val === null) return [""];
       let d;
-      if (typeof val === 'string') {
+      
+      // Better Date Parsing for US vs EU
+      if (typeof val === 'string' && val.includes('/')) {
         let p = val.split(/[\/\-\. ]/);
-        if (p.length >= 2) {
-          let day = (config.locale === "US") ? (p[1] || 1) : p[0];
-          let month = (config.locale === "US") ? p[0] : (p[1] || 1);
-          let year = p[2] || new Date().getFullYear();
-          if (year.toString().length === 2) year = "20" + year;
-          d = new Date(year, month - 1, day);
-        }
-      } else if (val instanceof Date) { d = val; }
+        let day = (config.locale === "US") ? (p[1] || 1) : p[0];
+        let month = (config.locale === "US") ? p[0] : (p[1] || 1);
+        let year = p[2] || new Date().getFullYear();
+        if (year.toString().length === 2) year = "20" + year;
+        d = new Date(year, month - 1, day);
+      } else {
+        d = (val instanceof Date) ? val : new Date(val);
+      }
 
       if (d && !isNaN(d.getTime())) {
-        return (config.format === "UNIX") ? [Math.floor(d.getTime()/1000)] : [Utilities.formatDate(d, timezone, "yyyy-MM-dd HH:mm:ss")];
+        if (config.format === "UNIX") return [Math.floor(d.getTime() / 1000).toString()];
+        if (config.format === "US_LONG") return [Utilities.formatDate(d, timezone, "MMMM dd, yyyy")];
+        return [Utilities.formatDate(d, timezone, "yyyy-MM-dd")];
       }
       return [val];
     });
-    sheet.getRange(2, colIdx + 1, processed.length, 1).setValues(processed);
+
+    sheet.insertColumnAfter(colIdx);
+    const targetRange = sheet.getRange(2, colIdx + 1, processed.length, 1);
+    sheet.getRange(1, colIdx + 1).setValue(colName + "_cleaned").setFontWeight("bold");
+    
+    // FORCE PLAIN TEXT to prevent Sheets from auto-changing "March 02" back to "3/2/2026"
+    targetRange.setNumberFormat("@"); 
+    targetRange.setValues(processed);
   });
-  return "Date transformation successful.";
+  return "Date transformation successful. Created new columns.";
 }
 
 function applyScalingTransformation(scalingConfigs) {
@@ -261,63 +267,51 @@ function applyScalingTransformation(scalingConfigs) {
 
 function applyMissingTransformation(configs) {
   const sheet = SpreadsheetApp.getActiveSheet();
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
   const rowsToDelete = new Set();
   
-  // Sort descending by index to handle column additions safely
   const sortedConfigs = configs.sort((a, b) => b.index - a.index);
 
   sortedConfigs.forEach(config => {
     const colIdx = config.index;
-    const raw = sheet.getRange(2, colIdx, sheet.getLastRow() - 1, 1).getValues();
+    const raw = data.slice(1).map(r => r[colIdx - 1]);
 
     if (config.method === "DROP") {
-      // COLLECT ROWS FOR DELETION
-      raw.forEach((row, i) => {
-        if (row[0] === "" || row[0] === null) {
-          rowsToDelete.add(i + 2); // +2 for header offset
-        }
-      });
+      raw.forEach((val, i) => { if (val === "" || val === null) rowsToDelete.add(i + 2); });
     } else {
-      // CALCULATE STATS FOR IMPUTATION
-      const nums = raw.map(r => parseFloat(r[0])).filter(v => !isNaN(v));
-      const mean = nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 0;
-      const median = nums.length ? nums.sort((a,b)=>a-b)[Math.floor(nums.length/2)] : 0;
+      let lastKnownValue = null; // Memory for Forward Fill
       
-      const modeMap = {};
-      raw.forEach(r => { if(r[0]) modeMap[r[0]] = (modeMap[r[0]] || 0) + 1; });
-      const mode = Object.keys(modeMap).reduce((a, b) => modeMap[a] > modeMap[b] ? a : b, "");
-
-      // Prepare New Column
-      sheet.insertColumnAfter(colIdx);
-      sheet.getRange(1, colIdx + 1).setValue(headers[colIdx-1] + "_imputed").setFontWeight("bold");
-
-      const processed = raw.map((row, i) => {
-        let val = row[0];
-        if (val !== "" && val !== null) return [val];
+      // Calculate Stats (only for non-fill methods)
+      const nums = raw.map(v => parseFloat(v)).filter(v => !isNaN(v));
+      const mean = nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : 0;
+      
+      const processed = raw.map((val, i) => {
+        if (val !== "" && val !== null) {
+          lastKnownValue = val;
+          return [val];
+        }
         
         switch (config.method) {
           case "MEAN": return [mean];
-          case "MEDIAN": return [median];
           case "ZERO": return [0];
-          case "MODE": return [mode];
-          case "LABEL": return ["Unknown"];
+          case "FORWARD": return [lastKnownValue || ""]; // Carrying forward memory
           case "CUSTOM": return [config.customVal];
-          case "FORWARD": return i > 0 ? [raw[i-1][0]] : [""];
           default: return [""];
         }
       });
+
+      sheet.insertColumnAfter(colIdx);
+      sheet.getRange(1, colIdx + 1).setValue(headers[colIdx-1] + "_imputed").setFontWeight("bold");
       sheet.getRange(2, colIdx + 1, processed.length, 1).setValues(processed);
     }
   });
 
-  // EXECUTE ROW DELETIONS
   if (rowsToDelete.size > 0) {
     const sortedRows = Array.from(rowsToDelete).sort((a, b) => b - a);
     sortedRows.forEach(rowIdx => sheet.deleteRow(rowIdx));
-    return `Cleaned! Deleted ${rowsToDelete.size} rows with missing values and imputed others.`;
+    return `Cleaned! Deleted ${rowsToDelete.size} rows.`;
   }
-
   return "Missing values imputed successfully.";
 }
 
