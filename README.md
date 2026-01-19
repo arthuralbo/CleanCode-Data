@@ -53,4 +53,4 @@ The engine never overwrites original data. It generates new, labeled columns (e.
 ---
 
 ## 📫 Contact
-**Arthur Albo** *Math & Stats @ Concordia University* [LinkedIn](https://www.linkedin.com/in/arthuralbo) | [Portfolio Website](https://arthur-albo-portfolio.vercel.app)
+**Arthur Albo** *Math & Stats @ Concordia University* [LinkedIn](www.linkedin.com/in/arthur-albo) | [Portfolio Website](https://portfolio-arthur-albo.vercel.app/)
