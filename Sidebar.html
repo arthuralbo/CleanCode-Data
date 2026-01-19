@@ -9,7 +9,7 @@
   <body>
     <div class="sidebar-wrapper">
       <header>
-        <h2>Data Prep Engine</h2>
+        <h2>Start your Data Preparation</h2>
         <p class="subtitle">1. Define Schema & Scan</p>
       </header>
 
@@ -19,17 +19,19 @@
           <button class="mini-btn" onclick="toggleAllSchema(false)">None</button>
         </div>
         
-        <p class="instruction" style="margin-top:0;">Variable Schema</p>
+        <p class="instruction" style="margin-top:0;">- Select variables and verify their data types:</p>
         
-        <div id="schema-list" class="scroll-box">
-          </div>
+        <div id="schema-list" class="scroll-box"></div>
         
-        <button id="scan-btn" class="primary-btn" onclick="runInitialScan()">🔍 Validate & Scan</button>
+        <button id="scan-btn" class="primary-btn" onclick="runInitialScan()">🔍 Validate & Scan Data</button>
         
         <div id="scan-status">Ready.</div>
       </div>
 
-      <p class="subtitle" style="margin-bottom: 8px;">2. Apply Transformations</p>
+      <p class="subtitle" style="margin-bottom: 8px;">2. Fix issues (Apply one section at a time)</p>
+      <p style="font-size: 10px; color: var(--text-mute); margin: -4px 0 10px 4px;">
+        💡 Apply a transformation, then re-scan to update the results.
+      </p>
 
       <main>
         <details id="mod-dates" class="module-card disabled-module">
