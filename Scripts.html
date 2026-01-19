@@ -4,13 +4,14 @@
     initAccordion();
   };
 
+  /**
+   * Prevents multiple accordion sections from being open at once
+   */
   function initAccordion() {
     const allDetails = document.querySelectorAll('details');
     allDetails.forEach((targetDetail) => {
-      // We use the 'click' event on the summary to intercept the toggle
       const summary = targetDetail.querySelector('summary');
       summary.addEventListener('click', (e) => {
-        // If we are clicking to open...
         if (!targetDetail.hasAttribute('open')) {
           allDetails.forEach((otherDetail) => {
             if (otherDetail !== targetDetail) {
@@ -22,6 +23,9 @@
     });
   }
 
+  /**
+   * Renders the initial column list with suggested types
+   */
   function renderSchema(schema) {
     const container = document.getElementById('schema-list');
     container.innerHTML = schema.map(col => `
@@ -37,87 +41,91 @@
     `).join('');
   }
 
+  /**
+   * Triggers the server-side diagnostic
+   */
   function runInitialScan() {
     const btn = document.getElementById('scan-btn');
     const status = document.getElementById('scan-status');
+    
+    // Clear previous error styles
+    status.classList.remove('error-pulse');
+    
     const selections = Array.from(document.querySelectorAll('.schema-item')).map(item => ({
       index: parseInt(item.querySelector('.schema-check').value),
       type: item.querySelector('.schema-type').value,
       checked: item.querySelector('.schema-check').checked
     })).filter(s => s.checked);
 
-    if (selections.length === 0) return alert("Select variables!");
-    btn.disabled = true; btn.innerText = "Scanning...";
+    if (selections.length === 0) return alert("Please select at least one variable.");
+    
+    btn.disabled = true; 
+    btn.innerText = "Scanning...";
+    status.innerText = "> Analyzing data integrity...";
+
     google.script.run.withSuccessHandler(res => {
-      btn.disabled = false; btn.innerText = "Re-Scan Selection";
-      if (res.error) { status.innerHTML = `<div class="error-msg">⚠️ ${res.error}</div>`; resetUI(); } 
-      else { displayScanResults(res); }
+      btn.disabled = false; 
+      btn.innerText = "Re-Scan Selection";
+      
+      if (res.error) { 
+        // 1. Display the specific Error (Row, Column, Value)
+        status.innerHTML = `<div style="color: #d93025; font-weight: bold;">⚠️ ${res.error}</div>`;
+        status.classList.add('error-pulse');
+        
+        // 2. Reset modules but KEEP the error message visible
+        resetUI(true); 
+      } 
+      else { 
+        status.classList.remove('error-pulse');
+        displayScanResults(res); 
+      }
     }).performDiagnostic(selections);
   }
 
+  /**
+   * Unlocks modules and updates badges based on scan report
+   */
   function displayScanResults(res) {
-    resetUI();
+    resetUI(); // Standard reset (clears previous status text)
     
-    // 1. Missing Values
-    if (res.hasMissing) {
-      unlock('mod-missing', 'list-missing', res.missingCount, res.missingDetails, 'missing');
-    }
+    if (res.hasMissing) unlock('mod-missing', 'list-missing', res.missingCount, res.missingDetails, 'missing');
     
-    // 2. Dates (Calculated Sum for the Badge)
-    let totalDateObservations = 0;
-    if (res.dateDetails) {
-      for (let count of Object.values(res.dateDetails)) {
-        totalDateObservations += count;
-      }
-    }
-    if (totalDateObservations > 0) {
-      unlock('mod-dates', 'list-dates', totalDateObservations, res.dateDetails, 'date');
-    }
+    let totalDateObs = 0;
+    if (res.dateDetails) Object.values(res.dateDetails).forEach(c => totalDateObs += c);
+    if (totalDateObs > 0) unlock('mod-dates', 'list-dates', totalDateObs, res.dateDetails, 'date');
     
-    // 3. Outliers
-    if (res.hasOutliers) {
-      unlock('mod-scaling', 'list-outliers', res.outlierCount, res.outlierDetails, 'scaling');
-    }
+    if (res.hasOutliers) unlock('mod-scaling', 'list-outliers', res.outlierCount, res.outlierDetails, 'scaling');
     
-    // 4. Categorical Logic (Cleanup & Encoding)
-    const catDetails = {};
-    let totalCatObservations = 0;
-    const schemaItems = Array.from(document.querySelectorAll('.schema-item'));
-    
-    for (const [colName, count] of Object.entries(res.stringDetails || {})) {
-      const item = schemaItems.find(i => i.querySelector('.col-name').innerText === colName);
-      if (item && item.querySelector('.schema-type').value === 'Categorical') {
-        catDetails[colName] = count;
-        totalCatObservations += count;
-      }
-    }
-
-    if (totalCatObservations > 0) {
-      unlock('mod-cleanup', 'list-cleanup', res.cleanupCount, catDetails, 'cleanup');
-      unlock('mod-encoding', 'list-encoding', totalCatObservations, catDetails, 'encoding');
+    if (res.hasStrings) {
+      unlock('mod-cleanup', 'list-cleanup', res.cleanupCount, res.stringDetails, 'cleanup');
+      let totalStr = 0;
+      Object.values(res.stringDetails).forEach(c => totalStr += c);
+      unlock('mod-encoding', 'list-encoding', totalStr, res.stringDetails, 'encoding');
     }
     
     document.getElementById('scan-status').innerHTML = 
       `<strong>Scan Complete:</strong> Found ${res.totalIssues} potential improvements.`;
   }
 
+  /**
+   * Populates module lists and enables UI cards
+   */
   function unlock(modId, listId, count, details, type) {
     const mod = document.getElementById(modId);
-    if (!mod) return; // Safety check
-
+    if (!mod) return;
     mod.classList.remove('disabled-module');
     
-    // Update the main module badge (the pill in the header)
     const badge = mod.querySelector('.badge');
-    if (badge) badge.innerText = count;
+    if (badge) {
+      badge.innerText = count;
+      badge.classList.add('filled');
+    }
     
     let html = '';
     for (const [colName, obsCount] of Object.entries(details)) {
-      // Get the type from the schema list to determine dropdown options
       const schemaItem = Array.from(document.querySelectorAll('.schema-item'))
         .find(i => i.querySelector('.col-name').innerText === colName);
-      
-      if (!schemaItem) continue; // Skip if variable not found in current schema
+      if (!schemaItem) continue;
 
       const colIdx = schemaItem.querySelector('.schema-check').value;
       const colType = schemaItem.querySelector('.schema-type').value;
@@ -127,20 +135,16 @@
           <div class="config-row">
             <div class="config-header">
               <input type="checkbox" class="scaling-check" value="${colIdx}" onchange="toggleFolder(this)">
-              <div class="header-text">
-                <strong>${colName}</strong>
-                <span class="count-pill">${obsCount} outliers</span>
-              </div>
+              <div class="header-text"><strong>${colName}</strong><span class="count-pill">${obsCount} outliers</span></div>
             </div>
             <div class="folder-content" style="display:none;">
-              <p class="instruction">Scaling Strategy:</p>
               <select class="scaling-method" onchange="validateScalingInputs()">
                 <option value="" disabled selected>Select Strategy...</option>
-                <option value="Z-SCORE">Z-Score (Standardization)</option>
-                <option value="MIN-MAX">Min-Max (0 to 1)</option>
-                <option value="LOG">Log Transform (ln(1+x))</option>
-                <option value="WINSORIZE">Outlier Capping (3rd Sigma)</option>
-                <option value="DROP">❌ Drop Observations</option>
+                <option value="Z-SCORE">Z-Score</option>
+                <option value="MIN-MAX">Min-Max</option>
+                <option value="LOG">Log Transform</option>
+                <option value="WINSORIZE">Winsorize</option>
+                <option value="DROP">❌ Drop Rows</option>
               </select>
             </div>
           </div>`;
@@ -149,53 +153,40 @@
           <div class="config-row">
             <div class="config-header">
               <input type="checkbox" class="date-fix-check" value="${colIdx}" onchange="toggleFolder(this)">
-              <div class="header-text">
-                <strong>${colName}</strong>
-                <span class="count-pill">${obsCount} dates</span>
-              </div>
+              <div class="header-text"><strong>${colName}</strong><span class="count-pill">${obsCount} items</span></div>
             </div>
             <div class="folder-content" style="display:none;">
-              <p class="instruction">Identify Current Style:</p>
               <select class="date-locale" onchange="validateDateInputs()">
-                <option value="" disabled selected>Current Style...</option>
-                <option value="US">Month / Day / Year</option>
-                <option value="EU">Day / Month / Year</option>
-                <option value="EU">Year / Month / Day</option>
+                <option value="" disabled selected>Source Locale...</option>
+                <option value="US">Month/Day/Year (US)</option>
+                <option value="EU">Day/Month/Year (EU)</option>
               </select>
-              <p class="instruction">Output Format:</p>
-              <select class="date-format" onchange="validateDateInputs()">
-                <option value="" disabled selected>Output Format...</option>
-                <option value="ISO">Standard (yyyy-mm-dd)</option>
-                <option value="UNIX">Computer Format (Unix Timestamp)</option>
+              <select class="date-format" onchange="validateDateInputs()" style="margin-top:5px;">
+                <option value="" disabled selected>Target Format...</option>
+                <option value="ISO">YYYY-MM-DD</option>
+                <option value="US_LONG">Long Form (Month DD, YYYY)</option>
+                <option value="UNIX">Unix Timestamp</option>
               </select>
-              <div class="date-preview" style="font-size:9px; color:var(--google-blue); margin-top:5px; font-style:italic;">
-                * Dates like "02-March" will be auto-detected.
-              </div>
             </div>
           </div>`;
       } else if (type === 'missing') {
-        let options = '';
-        if (colType === 'Numeric') {
-          options = `<option value="MEAN">Mean</option><option value="MEDIAN">Median</option><option value="ZERO">Zero</option><option value="CUSTOM">Custom Number</option>`;
-        } else if (colType === 'Categorical') {
-          options = `<option value="MODE">Mode (Most Frequent)</option><option value="LABEL">Label as "Unknown"</option><option value="CUSTOM">Custom String</option>`;
-        } else {
-          options = `<option value="FORWARD">Forward Fill</option><option value="MEDIAN">Median Date</option><option value="CUSTOM">Custom Date</option>`;
-        }
-        options += `<option value="DROP">❌ Drop Observations (Delete Rows)</option>`;
+        let opts = colType === 'Numeric' 
+          ? `<option value="MEAN">Mean</option><option value="MEDIAN">Median</option><option value="ZERO">Zero</option>`
+          : `<option value="MODE">Mode</option><option value="LABEL">"Unknown"</option>`;
+        opts += `<option value="FORWARD">Forward Fill</option><option value="CUSTOM">Custom Value</option><option value="DROP">❌ Drop Rows</option>`;
 
         html += `
           <div class="config-row">
             <div class="config-header">
-              <input type="checkbox" class="missing-check" value="${colIdx}" data-type="${colType}" onchange="toggleFolder(this)">
+              <input type="checkbox" class="missing-check" value="${colIdx}" onchange="toggleFolder(this)">
               <div class="header-text"><strong>${colName}</strong><span class="count-pill">${obsCount} missing</span></div>
             </div>
             <div class="folder-content" style="display:none;">
               <select class="missing-method" onchange="handleMissingMethodChange(this)">
-                <option value="" disabled selected>Select Imputation...</option>
-                ${options}
+                <option value="" disabled selected>Impute...</option>
+                ${opts}
               </select>
-              <input type="text" class="custom-input" style="display:none; margin-top:5px;" placeholder="Enter custom value..." oninput="validateMissingInputs()">
+              <input type="text" class="custom-input" style="display:none; margin-top:5px;" placeholder="Custom value...">
             </div>
           </div>`;
       } else if (type === 'cleanup') {
@@ -203,33 +194,28 @@
           <div class="config-row">
             <div class="config-header">
               <input type="checkbox" class="cleanup-master-check" value="${colIdx}" onchange="toggleFolder(this)">
-              <div class="header-text"><strong>${colName}</strong><span class="count-pill">${obsCount} items</span></div>
+              <div class="header-text"><strong>${colName}</strong></div>
             </div>
             <div class="folder-content" style="display:none; padding-left: 20px;">
-              <label class="check-label"><input type="checkbox" class="clean-trim" checked> Trim Spaces</label><br>
-              <label class="check-label"><input type="checkbox" class="clean-lower"> Convert to Lowercase</label><br>
-              <label class="check-label"><input type="checkbox" class="clean-upper"> Convert to Uppercase</label><br>
-              <label class="check-label"><input type="checkbox" class="clean-alpha"> Remove Special Chars</label>
+              <label><input type="checkbox" class="clean-trim" checked> Trim White Spaces</label><br>
+              <label><input type="checkbox" class="clean-lower"> lowercase</label><br>
+              <label><input type="checkbox" class="clean-alpha"> Alpha-Numeric Only</label>
             </div>
           </div>`;
       } else if (type === 'encoding') {
         html += `
-          <div class="config-row" data-colname="${colName}">
+          <div class="config-row">
             <div class="config-header">
               <input type="checkbox" class="encoding-check" value="${colIdx}" onchange="handleEncodingSelection(this)">
-              <div class="header-text">
-                <strong>${colName}</strong>
-                <span class="count-pill">${obsCount} items</span> 
-              </div>
+              <div class="header-text"><strong>${colName}</strong></div>
             </div>
             <div class="folder-content" style="display:none;">
               <select class="encoding-method" onchange="handleEncodingMethodChange(this)">
-                <option value="" disabled selected>Select Encoding...</option>
-                <option value="ONE-HOT">One-Hot Encoding (Dummies)</option>
-                <option value="LABEL">Label Encoding (Ordinal)</option>
+                <option value="" disabled selected>Encoding...</option>
+                <option value="ONE-HOT">One-Hot (Dummies)</option>
+                <option value="LABEL">Label (Ordinal)</option>
               </select>
               <div class="ordinal-sort-area" style="display:none; margin-top:10px;">
-                <p class="instruction">Drag to set order (Top = 0):</p>
                 <ul class="sortable-list"></ul>
               </div>
             </div>
@@ -239,242 +225,142 @@
     document.getElementById(listId).innerHTML = html;
   }
 
+  /**
+   * UI RESET: Prevents overwriting error messages if keepMessage is true
+   */
+  function resetUI(keepMessage = false) {
+    if (!keepMessage) {
+      document.getElementById('scan-status').innerHTML = "> Initializing scan...";
+      document.getElementById('scan-status').classList.remove('error-pulse');
+    }
+    
+    document.querySelectorAll('.module-card').forEach(mod => {
+      mod.classList.add('disabled-module');
+      mod.removeAttribute('open');
+      const badge = mod.querySelector('.badge');
+      if (badge) { badge.innerText = ''; badge.classList.remove('filled'); }
+      const container = mod.querySelector('.variable-config-container');
+      if (container) container.innerHTML = '';
+      const btn = mod.querySelector('.secondary-btn');
+      if (btn) btn.disabled = true;
+    });
+  }
+
+  // --- VALIDATION HELPERS ---
   function toggleFolder(cb) {
     const content = cb.closest('.config-row').querySelector('.folder-content');
     content.style.display = cb.checked ? "block" : "none";
-    
-    validateScalingInputs(); 
-    validateDateInputs();
-    validateMissingInputs();
-    validateCleanupInputs(); 
-    validateEncodingInputs();
+    validateScalingInputs(); validateDateInputs(); validateMissingInputs(); validateCleanupInputs(); validateEncodingInputs();
   }
 
   function validateScalingInputs() {
-    const any = Array.from(document.querySelectorAll('.config-row')).some(row => row.querySelector('.scaling-check')?.checked && row.querySelector('.scaling-method')?.value);
+    const any = Array.from(document.querySelectorAll('.scaling-check:checked')).some(cb => cb.closest('.config-row').querySelector('.scaling-method').value);
     document.getElementById('scaling-apply-btn').disabled = !any;
   }
 
   function validateDateInputs() {
-    const any = Array.from(document.querySelectorAll('.config-row')).some(row => row.querySelector('.date-fix-check')?.checked && row.querySelector('.date-locale')?.value && row.querySelector('.date-format')?.value);
+    const any = Array.from(document.querySelectorAll('.date-fix-check:checked')).some(cb => {
+      const row = cb.closest('.config-row');
+      return row.querySelector('.date-locale').value && row.querySelector('.date-format').value;
+    });
     document.getElementById('date-apply-btn').disabled = !any;
   }
 
+  function validateMissingInputs() {
+    const any = Array.from(document.querySelectorAll('.missing-check:checked')).some(cb => cb.closest('.config-row').querySelector('.missing-method').value);
+    document.getElementById('missing-apply-btn').disabled = !any;
+  }
+
+  function validateCleanupInputs() {
+    const any = document.querySelectorAll('.cleanup-master-check:checked').length > 0;
+    document.getElementById('cleanup-apply-btn').disabled = !any;
+  }
+
+  function validateEncodingInputs() {
+    const any = Array.from(document.querySelectorAll('.encoding-check:checked')).some(cb => cb.closest('.config-row').querySelector('.encoding-method').value);
+    document.getElementById('encoding-apply-btn').disabled = !any;
+  }
+
+  // --- ACTION HANDLERS ---
   function runDateFix() {
     const btn = document.getElementById('date-apply-btn'), configs = [];
-    document.querySelectorAll('.config-row').forEach(row => {
-      const cb = row.querySelector('.date-fix-check');
-      if (cb?.checked) configs.push({ index: parseInt(cb.value), locale: row.querySelector('.date-locale').value, format: row.querySelector('.date-format').value });
+    document.querySelectorAll('.date-fix-check:checked').forEach(cb => {
+      const row = cb.closest('.config-row');
+      configs.push({ index: parseInt(cb.value), locale: row.querySelector('.date-locale').value, format: row.querySelector('.date-format').value });
     });
-    toggleLoading(btn, true, "Applying...");
+    toggleLoading(btn, true, "Processing...");
     google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyDateTransformation(configs);
   }
 
   function runScalingFix() {
     const btn = document.getElementById('scaling-apply-btn'), configs = [];
-    document.querySelectorAll('.config-row').forEach(row => {
-      const cb = row.querySelector('.scaling-check');
-      if (cb?.checked) configs.push({ index: parseInt(cb.value), method: row.querySelector('.scaling-method').value });
+    document.querySelectorAll('.scaling-check:checked').forEach(cb => {
+      configs.push({ index: parseInt(cb.value), method: cb.closest('.config-row').querySelector('.scaling-method').value });
     });
     toggleLoading(btn, true, "Scaling...");
     google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyScalingTransformation(configs);
   }
 
-  // Ensure refreshAfterFix works for all modules by using a generic label
+  function runMissingFix() {
+    const btn = document.getElementById('missing-apply-btn'), configs = [];
+    document.querySelectorAll('.missing-check:checked').forEach(cb => {
+      const row = cb.closest('.config-row');
+      configs.push({ index: parseInt(cb.value), method: row.querySelector('.missing-method').value, customVal: row.querySelector('.custom-input').value });
+    });
+    toggleLoading(btn, true, "Imputing...");
+    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyMissingTransformation(configs);
+  }
+
+  function runCleanupFix() {
+    const btn = document.getElementById('cleanup-apply-btn'), configs = [];
+    document.querySelectorAll('.cleanup-master-check:checked').forEach(cb => {
+      const row = cb.closest('.config-row');
+      configs.push({ index: parseInt(cb.value), doTrim: row.querySelector('.clean-trim').checked, doLower: row.querySelector('.clean-lower').checked, doAlphaNum: row.querySelector('.clean-alpha').checked });
+    });
+    toggleLoading(btn, true, "Cleaning...");
+    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyStructuralCleanup(configs);
+  }
+
+  function runEncodingFix() {
+    const btn = document.getElementById('encoding-apply-btn'), configs = [];
+    document.querySelectorAll('.encoding-check:checked').forEach(cb => {
+      const row = cb.closest('.config-row');
+      const order = Array.from(row.querySelectorAll('.sort-item input')).map(i => i.value);
+      configs.push({ index: parseInt(cb.value), method: row.querySelector('.encoding-method').value, order: order });
+    });
+    toggleLoading(btn, true, "Encoding...");
+    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyEncodingTransformation(configs);
+  }
+
   function refreshAfterFix(btn, msg) {
     updateLog(msg); 
     resetUI();
-    document.getElementById('scan-status').innerText = "Update complete. Select variables to re-scan.";
     google.script.run.withSuccessHandler(schema => { 
       renderSchema(schema); 
       toggleLoading(btn, false, "Apply"); 
     }).getInitialSchema();
   }
 
-  function toggleLoading(b, load, txt) { b.disabled = load; b.innerText = txt; b.style.opacity = load ? "0.5" : "1"; document.querySelector('main').style.pointerEvents = load ? 'none' : 'auto'; }
-
-
-  function resetUI() {
-    // 1. Clear the main status
-    document.getElementById('scan-status').innerHTML = "> Initializing scan...";
-    
-    // 2. Target all modules
-    const modules = document.querySelectorAll('.module-card');
-    modules.forEach(mod => {
-      // Re-apply the disabled look
-      mod.classList.add('disabled-module');
-      mod.removeAttribute('open'); // Close any open sections
-      
-      // Reset the Badge (Pill)
-      const badge = mod.querySelector('.badge');
-      if (badge) {
-        badge.innerText = ''; // Remove the number
-        badge.classList.remove('filled'); // Custom class for the "filled" look
-      }
-      
-      // Clear the internal list of variables
-      const listContainer = mod.querySelector('.variable-config-container');
-      if (listContainer) listContainer.innerHTML = '';
-      
-      // Disable the apply button inside
-      const applyBtn = mod.querySelector('.secondary-btn');
-      if (applyBtn) applyBtn.disabled = true;
-    });
-  }
-
-  function toggleAllSchema(v) { document.querySelectorAll('.schema-check').forEach(c => c.checked = v); }
-
-  function updateLog(m) { document.getElementById('log-console').innerText = "> " + m; }
-
-
-  function handleMissingMethodChange(select) {
-    const customInput = select.closest('.folder-content').querySelector('.custom-input');
-    customInput.style.display = (select.value === "CUSTOM") ? "block" : "none";
+  function handleMissingMethodChange(sel) {
+    sel.closest('.folder-content').querySelector('.custom-input').style.display = sel.value === "CUSTOM" ? "block" : "none";
     validateMissingInputs();
   }
 
-
-  function validateMissingInputs() {
-    const any = Array.from(document.querySelectorAll('#list-missing .config-row')).some(row => {
-      const cb = row.querySelector('.missing-check').checked;
-      const method = row.querySelector('.missing-method').value;
-      const custom = row.querySelector('.custom-input');
-      if (!cb || !method) return false;
-      if (method === "CUSTOM" && !custom.value) return false;
-      return true;
-    });
-    document.getElementById('missing-apply-btn').disabled = !any;
-  }
-
-  function runMissingFix() {
-    const btn = document.getElementById('missing-apply-btn');
-    const configs = [];
-    document.querySelectorAll('#list-missing .config-row').forEach(row => {
-      const cb = row.querySelector('.missing-check');
-      if (cb.checked) {
-        configs.push({
-          index: parseInt(cb.value),
-          method: row.querySelector('.missing-method').value,
-          customVal: row.querySelector('.custom-input').value
-        });
-      }
-    });
-    toggleLoading(btn, true, "Imputing...");
-    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyMissingTransformation(configs);
-  }
-
-
-  /**
-   * Executes the cleanup and refreshes the UI
-   */
-  function runCleanupFix() {
-    const btn = document.getElementById('cleanup-apply-btn');
-    const configs = [];
-    
-    document.querySelectorAll('#list-cleanup .config-row').forEach(row => {
-      const master = row.querySelector('.cleanup-master-check');
-      if (master.checked) {
-        configs.push({
-          index: parseInt(master.value),
-          doTrim: row.querySelector('.clean-trim').checked,
-          doLower: row.querySelector('.clean-lower').checked,
-          doUpper: row.querySelector('.clean-upper').checked,
-          doAlphaNum: row.querySelector('.clean-alpha').checked
-        });
-      }
-    });
-
-    toggleLoading(btn, true, "Cleaning...");
-    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyStructuralCleanup(configs);
-  }
-
-  function validateCleanupInputs() {
-    const any = Array.from(document.querySelectorAll('#list-cleanup .config-row'))
-      .some(row => row.querySelector('.cleanup-master-check').checked);
-    
-    document.getElementById('cleanup-apply-btn').disabled = !any;
-  }
-
-  /**
-   * Fetches unique values to build the Label Encoding order list
-   */
-  function handleEncodingMethodChange(select) {
-    const row = select.closest('.config-row');
+  function handleEncodingMethodChange(sel) {
+    const row = sel.closest('.config-row');
     const sortArea = row.querySelector('.ordinal-sort-area');
-    const colIdx = row.querySelector('.encoding-check').value;
-
-    if (select.value === "LABEL") {
+    if (sel.value === "LABEL") {
       sortArea.style.display = "block";
       google.script.run.withSuccessHandler(values => {
-        const list = sortArea.querySelector('.sortable-list');
-        
-        // Build the list
-        list.innerHTML = values.map(v => `
-          <li class="sort-item">
-            <span class="drag-handle">☰</span>
-            <span class="item-text">${v}</span>
-            <input type="hidden" value="${v}">
-          </li>`).join('');
-
-        // INITIALIZE SORTABLEJS
-        new Sortable(list, {
-          animation: 150,
-          handle: '.drag-handle', // Restricted to the ☰ icon
-          ghostClass: 'sortable-ghost', // Style for the empty space while dragging
-          chosenClass: 'sortable-chosen', // Style for the item being picked up
-          dragClass: 'sortable-drag' // Style for the actual moving element
-        });
-        
-      }).getUniqueValues(colIdx);
-    } else {
-      sortArea.style.display = "none";
-    }
+        sortArea.querySelector('.sortable-list').innerHTML = values.map(v => `<li class="sort-item"><span class="drag-handle">☰</span> ${v}<input type="hidden" value="${v}"></li>`).join('');
+        new Sortable(sortArea.querySelector('.sortable-list'), { animation: 150, handle: '.drag-handle' });
+      }).getUniqueValues(row.querySelector('.encoding-check').value);
+    } else { sortArea.style.display = "none"; }
     validateEncodingInputs();
   }
 
-  function runEncodingFix() {
-    const btn = document.getElementById('encoding-apply-btn');
-    const configs = [];
-    document.querySelectorAll('#list-encoding .config-row').forEach(row => {
-      const cb = row.querySelector('.encoding-check');
-      if (cb.checked) {
-        const method = row.querySelector('.encoding-method').value;
-        const order = Array.from(row.querySelectorAll('.sort-item input')).map(i => i.value);
-        configs.push({ index: parseInt(cb.value), method: method, order: order });
-      }
-    });
-    toggleLoading(btn, true, "Encoding...");
-    google.script.run.withSuccessHandler(msg => refreshAfterFix(btn, msg)).applyEncodingTransformation(configs);
-  }
-
-  function handleEncodingSelection(cb) {
-    toggleFolder(cb);
-    validateEncodingInputs();
-  }
-
-  // Logic to enable/disable the Encoding Apply button
-  function validateEncodingInputs() {
-    const any = Array.from(document.querySelectorAll('#list-encoding .config-row')).some(row => {
-      const cb = row.querySelector('.encoding-check').checked;
-      const method = row.querySelector('.encoding-method').value;
-      return cb && method !== "";
-    });
-    document.getElementById('encoding-apply-btn').disabled = !any;
-  }
-
-
-  document.querySelectorAll('details').forEach((detail) => {
-    detail.addEventListener('click', (e) => {
-      // We only care about opening
-      if (!detail.hasAttribute('open')) {
-        // Close all other details elements
-        document.querySelectorAll('details').forEach((otherDetail) => {
-          if (otherDetail !== detail) {
-            otherDetail.removeAttribute('open');
-          }
-        });
-      }
-    });
-  });
-
+  function handleEncodingSelection(cb) { toggleFolder(cb); validateEncodingInputs(); }
+  function toggleLoading(b, load, txt) { b.disabled = load; b.innerText = txt; b.style.opacity = load ? "0.5" : "1"; }
+  function updateLog(m) { document.getElementById('log-console').innerText = "> " + m; }
+  function toggleAllSchema(v) { document.querySelectorAll('.schema-check').forEach(c => c.checked = v); }
 </script>
